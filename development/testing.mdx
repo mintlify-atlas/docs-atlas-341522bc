@@ -1,0 +1,633 @@
+---
+title: Testing
+description: Running tests, linting, and maintaining code quality in SaaS Starter Vue
+---
+
+The project includes comprehensive testing and code quality tools for both backend and frontend code.
+
+## Testing Stack
+
+<CardGroup cols={2}>
+  <Card title="PHPUnit" icon="php">
+    Backend testing framework for unit and feature tests
+  </Card>
+  
+  <Card title="Laravel Pint" icon="broom">
+    PHP code style fixer based on PHP-CS-Fixer
+  </Card>
+  
+  <Card title="ESLint" icon="javascript">
+    JavaScript/TypeScript linter with Vue support
+  </Card>
+  
+  <Card title="Prettier" icon="paintbrush">
+    Code formatter for consistent styling
+  </Card>
+</CardGroup>
+
+## Backend Testing
+
+The project uses **PHPUnit** for Laravel testing:
+
+### Configuration
+
+```xml phpunit.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="vendor/autoload.php" colors="true">
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>app</directory>
+        </include>
+    </source>
+    <php>
+        <env name="APP_ENV" value="testing"/>
+        <env name="DB_CONNECTION" value="sqlite"/>
+        <env name="DB_DATABASE" value=":memory:"/>
+        <env name="CACHE_STORE" value="array"/>
+        <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="SESSION_DRIVER" value="array"/>
+    </php>
+</phpunit>
+```
+
+### Test Structure
+
+```
+tests/
+├── Feature/               # Feature/integration tests
+│   ├── Auth/
+│   │   ├── AuthenticationTest.php
+│   │   ├── RegistrationTest.php
+│   │   ├── PasswordResetTest.php
+│   │   └── TwoFactorChallengeTest.php
+│   ├── DashboardTest.php
+│   ├── Settings/
+│   │   └── PasswordUpdateTest.php
+│   └── ExampleTest.php
+└── Unit/                  # Unit tests
+    └── ExampleTest.php
+```
+
+### Example Feature Test
+
+```php tests/Feature/DashboardTest.php
+namespace Tests\Feature;
+
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+class DashboardTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_guests_are_redirected_to_the_login_page()
+    {
+        $response = $this->get(route('dashboard'));
+        $response->assertRedirect(route('login'));
+    }
+
+    public function test_authenticated_users_can_visit_the_dashboard()
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $response = $this->get(route('dashboard'));
+        $response->assertOk();
+    }
+
+    public function test_dashboard_displays_correct_stats()
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        // Create test data
+        Tenant::factory()->count(5)->create(['status' => 'Active']);
+        Tenant::factory()->count(3)->create(['status' => 'Trial']);
+
+        $response = $this->get(route('dashboard'));
+
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->component('system/Dashboard')
+            ->has('stats', fn ($stats) => $stats
+                ->where('total_tenants', 8)
+                ->where('active_tenants', 5)
+                ->where('trial_tenants', 3)
+            )
+        );
+    }
+}
+```
+
+### Testing Multi-Tenancy
+
+<Tabs>
+  <Tab title="Tenant Creation">
+    ```php tests/Feature/TenantTest.php
+    public function test_tenant_can_be_created()
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $plan = Plan::factory()->create();
+
+        $response = $this->post(route('tenants.store'), [
+            'name' => 'Test Company',
+            'owner_name' => 'John Doe',
+            'owner_email' => 'john@test.com',
+            'owner_password' => 'password123',
+            'plan_id' => $plan->id,
+            'domain' => 'testcompany',
+        ]);
+
+        $response->assertRedirect(route('tenants.index'));
+        $this->assertDatabaseHas('tenants', [
+            'name' => 'Test Company',
+            'owner_email' => 'john@test.com',
+        ]);
+    }
+    ```
+  </Tab>
+
+  <Tab title="Tenant Isolation">
+    ```php tests/Feature/TenantIsolationTest.php
+    public function test_tenants_cannot_access_each_other_data()
+    {
+        $tenant1 = Tenant::factory()->create();
+        $tenant2 = Tenant::factory()->create();
+
+        // Create users in each tenant
+        $tenant1->run(function () {
+            User::factory()->create(['name' => 'Tenant 1 User']);
+        });
+
+        $tenant2->run(function () {
+            User::factory()->create(['name' => 'Tenant 2 User']);
+        });
+
+        // Verify isolation
+        $tenant1->run(function () {
+            $this->assertEquals(1, User::count());
+            $this->assertEquals('Tenant 1 User', User::first()->name);
+        });
+
+        $tenant2->run(function () {
+            $this->assertEquals(1, User::count());
+            $this->assertEquals('Tenant 2 User', User::first()->name);
+        });
+    }
+    ```
+  </Tab>
+
+  <Tab title="Service Tests">
+    ```php tests/Feature/TenantServiceTest.php
+    public function test_tenant_service_creates_tenant_with_database()
+    {
+        $service = app(TenantService::class);
+        $plan = Plan::factory()->create();
+
+        $tenant = $service->createTenant([
+            'name' => 'Test Company',
+            'owner_name' => 'John Doe',
+            'owner_email' => 'john@test.com',
+            'owner_password' => 'password123',
+            'plan_id' => $plan->id,
+            'domain' => 'testcompany',
+        ]);
+
+        $this->assertInstanceOf(Tenant::class, $tenant);
+        $this->assertEquals('Test Company', $tenant->name);
+
+        // Verify database was created
+        $tenant->run(function () {
+            $this->assertDatabaseHas('users', [
+                'email' => 'john@test.com',
+            ]);
+        });
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Running PHP Tests
+
+<CodeGroup>
+```bash All Tests
+composer test
+```
+
+```bash Specific Test
+php artisan test --filter=DashboardTest
+```
+
+```bash Feature Tests Only
+php artisan test tests/Feature
+```
+
+```bash Unit Tests Only
+php artisan test tests/Unit
+```
+
+```bash With Coverage
+php artisan test --coverage
+```
+</CodeGroup>
+
+## Frontend Testing
+
+While the project doesn't include frontend tests by default, you can add them using **Vitest** or **Cypress**.
+
+### Adding Vitest (Recommended)
+
+<Steps>
+  <Step title="Install Dependencies">
+    ```bash
+    pnpm add -D vitest @vue/test-utils happy-dom
+    ```
+  </Step>
+
+  <Step title="Configure Vitest">
+    ```typescript vite.config.ts
+    import { defineConfig } from 'vite';
+    
+    export default defineConfig({
+        test: {
+            environment: 'happy-dom',
+            globals: true,
+        },
+        // ... other config
+    });
+    ```
+  </Step>
+
+  <Step title="Write Tests">
+    ```typescript tests/components/AppHeader.test.ts
+    import { mount } from '@vue/test-utils';
+    import { describe, it, expect } from 'vitest';
+    import AppHeader from '@/components/AppHeader.vue';
+
+    describe('AppHeader', () => {
+        it('renders title prop', () => {
+            const wrapper = mount(AppHeader, {
+                props: { title: 'Dashboard' },
+            });
+
+            expect(wrapper.text()).toContain('Dashboard');
+        });
+    });
+    ```
+  </Step>
+
+  <Step title="Add Script">
+    ```json package.json
+    {
+        "scripts": {
+            "test": "vitest",
+            "test:ui": "vitest --ui"
+        }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Code Quality
+
+### PHP Linting with Pint
+
+**Laravel Pint** automatically fixes code style issues:
+
+```json pint.json
+{
+    "preset": "laravel"
+}
+```
+
+<CodeGroup>
+```bash Fix Code Style
+composer lint
+# or
+./vendor/bin/pint
+```
+
+```bash Check Only (No Fixes)
+composer test:lint
+# or
+./vendor/bin/pint --test
+```
+
+```bash Specific Files
+./vendor/bin/pint app/Services
+```
+</CodeGroup>
+
+### JavaScript Linting with ESLint
+
+**ESLint** with TypeScript and Vue support:
+
+```javascript eslint.config.js
+import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript';
+import prettier from 'eslint-config-prettier';
+import importPlugin from 'eslint-plugin-import';
+import vue from 'eslint-plugin-vue';
+
+export default defineConfigWithVueTs(
+    vue.configs['flat/essential'],
+    vueTsConfigs.recommended,
+    {
+        ignores: [
+            'vendor',
+            'node_modules',
+            'public',
+            'bootstrap/ssr',
+            'resources/js/components/ui/*',
+        ],
+    },
+    {
+        plugins: {
+            import: importPlugin,
+        },
+        rules: {
+            'vue/multi-word-component-names': 'off',
+            '@typescript-eslint/no-explicit-any': 'off',
+            '@typescript-eslint/consistent-type-imports': [
+                'error',
+                {
+                    prefer: 'type-imports',
+                    fixStyle: 'separate-type-imports',
+                },
+            ],
+            'import/order': [
+                'error',
+                {
+                    groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
+                    alphabetize: {
+                        order: 'asc',
+                        caseInsensitive: true,
+                    },
+                },
+            ],
+        },
+    },
+    prettier,
+);
+```
+
+<CodeGroup>
+```bash Fix Linting Issues
+pnpm run lint
+```
+
+```bash Check Only
+pnpm run lint -- --max-warnings 0
+```
+</CodeGroup>
+
+### Code Formatting with Prettier
+
+```json .prettierrc
+{
+    "semi": true,
+    "singleQuote": true,
+    "tabWidth": 4,
+    "trailingComma": "all",
+    "printWidth": 100,
+    "plugins": ["prettier-plugin-tailwindcss"]
+}
+```
+
+<CodeGroup>
+```bash Format Code
+pnpm run format
+```
+
+```bash Check Formatting
+pnpm run format:check
+```
+</CodeGroup>
+
+## Continuous Integration
+
+Example GitHub Actions workflow:
+
+```yaml .github/workflows/tests.yml
+name: Tests
+
+on: [push, pull_request]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.2
+          extensions: mbstring, xml, sqlite3
+
+      - name: Install Composer Dependencies
+        run: composer install --prefer-dist --no-progress
+
+      - name: Run PHP Tests
+        run: composer test
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install NPM Dependencies
+        run: pnpm install
+
+      - name: Run ESLint
+        run: pnpm run lint
+
+      - name: Check Formatting
+        run: pnpm run format:check
+
+      - name: Build Assets
+        run: pnpm run build
+```
+
+## Test Database
+
+The test suite uses SQLite in-memory database for speed:
+
+```php phpunit.xml
+<php>
+    <env name="DB_CONNECTION" value="sqlite"/>
+    <env name="DB_DATABASE" value=":memory:"/>
+</php>
+```
+
+### Refresh Database
+
+Use the `RefreshDatabase` trait to reset the database between tests:
+
+```php
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
+class ExampleTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_example()
+    {
+        // Database is fresh for each test
+    }
+}
+```
+
+## Running All Quality Checks
+
+Run all tests and linters before committing:
+
+```bash
+# Backend
+composer test      # Runs PHPUnit tests and Pint linting
+
+# Frontend
+pnpm run lint      # ESLint
+pnpm run format    # Prettier
+
+# Build
+pnpm run build     # Verify build succeeds
+```
+
+## Pre-commit Hooks
+
+Consider using **Husky** to run tests automatically:
+
+<Steps>
+  <Step title="Install Husky">
+    ```bash
+    pnpm add -D husky lint-staged
+    npx husky init
+    ```
+  </Step>
+
+  <Step title="Configure Pre-commit">
+    ```bash .husky/pre-commit
+    #!/bin/sh
+    . "$(dirname "$0")/_/husky.sh"
+
+    # Run PHP linting
+    composer test:lint
+
+    # Run frontend linting
+    pnpm run lint
+    pnpm run format:check
+    ```
+  </Step>
+
+  <Step title="Configure Lint-Staged">
+    ```json package.json
+    {
+        "lint-staged": {
+            "*.php": ["./vendor/bin/pint"],
+            "*.{js,ts,vue}": ["eslint --fix", "prettier --write"]
+        }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Testing Best Practices
+
+<AccordionGroup>
+  <Accordion title="Write Descriptive Test Names">
+    ```php
+    // Good
+    public function test_authenticated_users_can_create_tenants()
+
+    // Bad
+    public function test_create()
+    ```
+  </Accordion>
+
+  <Accordion title="Use Factories">
+    ```php
+    // Good
+    $user = User::factory()->create();
+    $tenants = Tenant::factory()->count(5)->create();
+
+    // Bad
+    $user = new User(['name' => 'Test', 'email' => 'test@test.com']);
+    $user->save();
+    ```
+  </Accordion>
+
+  <Accordion title="Test One Thing">
+    Each test should verify one behavior or scenario.
+  </Accordion>
+
+  <Accordion title="Arrange-Act-Assert">
+    ```php
+    public function test_example()
+    {
+        // Arrange
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        // Act
+        $response = $this->post('/tenants', $data);
+
+        // Assert
+        $response->assertRedirect();
+        $this->assertDatabaseHas('tenants', ['name' => 'Test']);
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Isolate Tests">
+    Use `RefreshDatabase` to ensure tests don't affect each other.
+  </Accordion>
+</AccordionGroup>
+
+## Code Coverage
+
+Generate code coverage reports:
+
+```bash
+php artisan test --coverage --min=80
+```
+
+This ensures at least 80% of your code is covered by tests.
+
+## Performance Testing
+
+For performance testing, consider:
+
+- **Laravel Telescope**: Monitor queries and performance
+- **Laravel Debugbar**: View queries, execution time, memory usage
+- **Blackfire**: Profile PHP applications
+
+```bash
+composer require --dev barryvdh/laravel-debugbar
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Project Structure" icon="folder-tree" href="/development/project-structure">
+    Understand the codebase organization
+  </Card>
+  
+  <Card title="Deployment" icon="rocket" href="/deployment/overview">
+    Deploy your application to production
+  </Card>
+</CardGroup>

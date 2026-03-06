@@ -1,0 +1,439 @@
+---
+title: Button Components
+description: Use button variants and styles for actions throughout your application
+---
+
+## Overview
+
+The Button component is built with reka-ui's `Primitive` component and uses **class-variance-authority** (CVA) to manage variants. It supports multiple visual styles and sizes.
+
+## Basic Usage
+
+```vue
+<script setup lang="ts">
+import { Button } from '@/components/ui/button'
+</script>
+
+<template>
+  <Button>Click me</Button>
+</template>
+```
+
+## Button Variants
+
+The button component supports 6 visual variants:
+
+<Tabs>
+  <Tab title="Preview">
+    ```vue
+    <template>
+      <div class="flex flex-wrap gap-4">
+        <Button variant="default">Default</Button>
+        <Button variant="destructive">Destructive</Button>
+        <Button variant="outline">Outline</Button>
+        <Button variant="secondary">Secondary</Button>
+        <Button variant="ghost">Ghost</Button>
+        <Button variant="link">Link</Button>
+      </div>
+    </template>
+    ```
+  </Tab>
+  <Tab title="Code">
+    ```typescript
+    // From resources/js/components/ui/button/index.ts
+    export const buttonVariants = cva(
+      "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50",
+      {
+        variants: {
+          variant: {
+            default: "bg-primary text-primary-foreground hover:bg-primary/90",
+            destructive: "bg-destructive text-white hover:bg-destructive/90",
+            outline: "border bg-background shadow-xs hover:bg-accent",
+            secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+            ghost: "hover:bg-accent hover:text-accent-foreground",
+            link: "text-primary underline-offset-4 hover:underline",
+          },
+        },
+      }
+    )
+    ```
+  </Tab>
+</Tabs>
+
+### Default
+
+Primary action button with filled background:
+
+```vue
+<Button variant="default">Save Changes</Button>
+```
+
+### Destructive
+
+For dangerous or destructive actions:
+
+```vue
+<Button variant="destructive">Delete Account</Button>
+```
+
+Example from `resources/js/components/DeleteUser.vue:42-44`:
+
+```vue
+<Button variant="destructive" data-test="delete-user-button">
+  Delete account
+</Button>
+```
+
+### Outline
+
+Button with border and transparent background:
+
+```vue
+<Button variant="outline">Cancel</Button>
+```
+
+### Secondary
+
+For secondary actions with muted styling:
+
+```vue
+<Button variant="secondary">Learn More</Button>
+```
+
+### Ghost
+
+Minimal button without background until hover:
+
+```vue
+<Button variant="ghost">View Details</Button>
+```
+
+### Link
+
+Styled like a text link:
+
+```vue
+<Button variant="link">Read documentation</Button>
+```
+
+## Button Sizes
+
+Buttons come in 6 different sizes:
+
+```vue
+<template>
+  <div class="flex items-center gap-4">
+    <Button size="sm">Small</Button>
+    <Button size="default">Default</Button>
+    <Button size="lg">Large</Button>
+  </div>
+</template>
+```
+
+### Size Variants
+
+- `sm` - Small button (h-8)
+- `default` - Default size (h-9)
+- `lg` - Large button (h-10)
+- `icon` - Square icon button (size-9)
+- `icon-sm` - Small icon button (size-8)
+- `icon-lg` - Large icon button (size-10)
+
+## Icon Buttons
+
+Buttons optimized for displaying only an icon:
+
+```vue
+<script setup lang="ts">
+import { Button } from '@/components/ui/button'
+import { X, Plus, Settings } from 'lucide-vue-next'
+</script>
+
+<template>
+  <div class="flex gap-2">
+    <Button size="icon-sm" variant="ghost">
+      <X class="size-4" />
+    </Button>
+    
+    <Button size="icon">
+      <Plus class="size-4" />
+    </Button>
+    
+    <Button size="icon-lg" variant="outline">
+      <Settings class="size-5" />
+    </Button>
+  </div>
+</template>
+```
+
+## Buttons with Icons
+
+Combine text with icons:
+
+```vue
+<script setup lang="ts">
+import { Button } from '@/components/ui/button'
+import { Mail, Download, Trash2 } from 'lucide-vue-next'
+</script>
+
+<template>
+  <div class="flex gap-4">
+    <!-- Icon on the left -->
+    <Button>
+      <Mail class="size-4" />
+      Send Email
+    </Button>
+    
+    <!-- Icon on the right -->
+    <Button variant="outline">
+      Download
+      <Download class="size-4" />
+    </Button>
+    
+    <!-- Destructive with icon -->
+    <Button variant="destructive">
+      <Trash2 class="size-4" />
+      Delete
+    </Button>
+  </div>
+</template>
+```
+
+Icons are automatically sized using the `[&_svg:not([class*='size-'])]:size-4` selector.
+
+## Loading State
+
+Show loading indicator with disabled state:
+
+```vue
+<script setup lang="ts">
+import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
+import { ref } from 'vue'
+
+const isLoading = ref(false)
+
+const handleClick = async () => {
+  isLoading.value = true
+  // Perform async operation
+  await new Promise(resolve => setTimeout(resolve, 2000))
+  isLoading.value = false
+}
+</script>
+
+<template>
+  <Button :disabled="isLoading" @click="handleClick">
+    <Spinner v-if="isLoading" />
+    {{ isLoading ? 'Saving...' : 'Save' }}
+  </Button>
+</template>
+```
+
+Example from `resources/js/pages/system/auth/Login.vue:89-98`:
+
+```vue
+<Button
+  type="submit"
+  class="mt-4 w-full"
+  :disabled="processing"
+  data-test="login-button"
+>
+  <Spinner v-if="processing" />
+  Log in
+</Button>
+```
+
+## Disabled State
+
+Buttons can be disabled:
+
+```vue
+<template>
+  <Button disabled>Disabled Button</Button>
+</template>
+```
+
+Disabled buttons automatically receive:
+- `pointer-events-none` - Prevents clicks
+- `opacity-50` - Visual indication of disabled state
+
+## As Child (Polymorphic)
+
+Render the button as a different element:
+
+```vue
+<script setup lang="ts">
+import { Button } from '@/components/ui/button'
+</script>
+
+<template>
+  <!-- Render as a link -->
+  <Button as-child>
+    <a href="https://example.com" target="_blank">
+      Visit Website
+    </a>
+  </Button>
+</template>
+```
+
+This is useful for:
+- Router links
+- Anchor tags
+- Custom interactive elements
+
+## Full Width Button
+
+Make button take full container width:
+
+```vue
+<template>
+  <Button class="w-full">Full Width Button</Button>
+</template>
+```
+
+## Button Groups
+
+Group related buttons:
+
+```vue
+<template>
+  <div class="inline-flex rounded-md shadow-sm" role="group">
+    <Button variant="outline" class="rounded-r-none">Left</Button>
+    <Button variant="outline" class="rounded-none border-x-0">Center</Button>
+    <Button variant="outline" class="rounded-l-none">Right</Button>
+  </div>
+</template>
+```
+
+## Common Patterns
+
+### Form Submit Button
+
+```vue
+<script setup lang="ts">
+import { useForm } from '@inertiajs/vue3'
+import { Button } from '@/components/ui/button'
+
+const form = useForm({
+  // form data
+})
+
+const submit = () => {
+  form.post('/endpoint')
+}
+</script>
+
+<template>
+  <form @submit.prevent="submit">
+    <!-- form fields -->
+    <Button type="submit" :disabled="form.processing">
+      {{ form.processing ? 'Submitting...' : 'Submit' }}
+    </Button>
+  </form>
+</template>
+```
+
+### Dialog Trigger
+
+```vue
+<script setup lang="ts">
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogTrigger, DialogContent } from '@/components/ui/dialog'
+</script>
+
+<template>
+  <Dialog>
+    <DialogTrigger as-child>
+      <Button>Open Dialog</Button>
+    </DialogTrigger>
+    <DialogContent>
+      <!-- dialog content -->
+    </DialogContent>
+  </Dialog>
+</template>
+```
+
+### Confirmation Actions
+
+```vue
+<template>
+  <div class="flex gap-2">
+    <Button variant="outline">Cancel</Button>
+    <Button variant="destructive">Confirm Delete</Button>
+  </div>
+</template>
+```
+
+## Toggle Components
+
+For toggle functionality, use the Toggle component:
+
+```vue
+<script setup lang="ts">
+import { Toggle } from '@/components/ui/toggle'
+import { Bold } from 'lucide-vue-next'
+import { ref } from 'vue'
+
+const isBold = ref(false)
+</script>
+
+<template>
+  <Toggle v-model="isBold" aria-label="Toggle bold">
+    <Bold class="size-4" />
+  </Toggle>
+</template>
+```
+
+## Toggle Group
+
+For mutually exclusive toggles:
+
+```vue
+<script setup lang="ts">
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { AlignLeft, AlignCenter, AlignRight } from 'lucide-vue-next'
+import { ref } from 'vue'
+
+const alignment = ref('left')
+</script>
+
+<template>
+  <ToggleGroup v-model="alignment" type="single">
+    <ToggleGroupItem value="left">
+      <AlignLeft class="size-4" />
+    </ToggleGroupItem>
+    <ToggleGroupItem value="center">
+      <AlignCenter class="size-4" />
+    </ToggleGroupItem>
+    <ToggleGroupItem value="right">
+      <AlignRight class="size-4" />
+    </ToggleGroupItem>
+  </ToggleGroup>
+</template>
+```
+
+## Button Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `variant` | `'default' \| 'destructive' \| 'outline' \| 'secondary' \| 'ghost' \| 'link'` | `'default'` | Visual style variant |
+| `size` | `'default' \| 'sm' \| 'lg' \| 'icon' \| 'icon-sm' \| 'icon-lg'` | `'default'` | Size variant |
+| `as` | `string \| Component` | `'button'` | Element or component to render as |
+| `asChild` | `boolean` | `false` | Render as child component |
+| `disabled` | `boolean` | `false` | Disable button |
+| `class` | `string` | - | Additional CSS classes |
+
+## Accessibility
+
+- Use descriptive text or `aria-label` for icon-only buttons
+- Disabled buttons have `pointer-events-none` and reduced opacity
+- Focus states have visible ring indicators
+- Proper `type` attribute for form buttons (`submit`, `button`, `reset`)
+
+## Best Practices
+
+1. **Use the right variant** - `destructive` for dangerous actions, `outline` for secondary actions
+2. **Add loading states** - Prevent double-clicks during async operations
+3. **Disable when needed** - Disable buttons during form submission
+4. **Icon accessibility** - Always provide aria-label for icon-only buttons
+5. **Consistent sizing** - Use the same size for related buttons in a group

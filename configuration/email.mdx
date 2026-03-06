@@ -1,0 +1,449 @@
+---
+title: Email Configuration
+description: Configure SMTP and email delivery for transactional emails and notifications
+---
+
+SaaS Starter Vue uses Laravel's mail system to send transactional emails including registration confirmations, password resets, subscription notifications, and tenant invitations.
+
+## Email Drivers
+
+Laravel supports multiple email delivery methods:
+
+- **SMTP** - Standard SMTP server (Gmail, Mailgun, etc.)
+- **Mailgun** - Mailgun API integration
+- **Postmark** - Postmark API integration
+- **Amazon SES** - AWS Simple Email Service
+- **Resend** - Resend API integration
+- **Log** - Write emails to log files (development only)
+- **Array** - Store emails in memory (testing only)
+
+<Note>
+  The application defaults to the `log` driver for development. Configure a real mail driver for production.
+</Note>
+
+## SMTP Configuration
+
+The most common email configuration uses SMTP:
+
+### Environment Variables
+
+<ParamField path="MAIL_MAILER" type="string" default="log">
+  The default mail driver. Set to `smtp` for SMTP delivery.
+</ParamField>
+
+<ParamField path="MAIL_HOST" type="string" default="127.0.0.1" required>
+  The SMTP server hostname.
+</ParamField>
+
+<ParamField path="MAIL_PORT" type="integer" default="2525" required>
+  The SMTP server port. Common ports:
+  - `25` - Standard SMTP (usually blocked by ISPs)
+  - `587` - TLS/STARTTLS (recommended)
+  - `465` - SSL
+  - `2525` - Alternative port (Mailgun, Mailtrap)
+</ParamField>
+
+<ParamField path="MAIL_USERNAME" type="string">
+  SMTP authentication username.
+</ParamField>
+
+<ParamField path="MAIL_PASSWORD" type="string">
+  SMTP authentication password.
+  
+  <Warning>Store this securely. Never commit to version control.</Warning>
+</ParamField>
+
+<ParamField path="MAIL_ENCRYPTION" type="string">
+  Encryption method. Options: `tls`, `ssl`, or leave empty for no encryption.
+  
+  <Note>Use `tls` for port 587, `ssl` for port 465.</Note>
+</ParamField>
+
+<ParamField path="MAIL_FROM_ADDRESS" type="string" default="hello@example.com" required>
+  The default "from" email address for all outgoing emails.
+</ParamField>
+
+<ParamField path="MAIL_FROM_NAME" type="string" default="${APP_NAME}">
+  The default "from" name for all outgoing emails. Supports variable substitution.
+</ParamField>
+
+## Provider-Specific Configuration
+
+### Gmail
+
+Using Gmail for SMTP (not recommended for production):
+
+<CodeGroup>
+```bash .env
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=your-email@gmail.com
+MAIL_PASSWORD=your-app-password
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS=your-email@gmail.com
+MAIL_FROM_NAME="${APP_NAME}"
+```
+</CodeGroup>
+
+<Warning>
+  **Gmail requires an App Password** (not your regular password). Enable 2FA and create an app password at: https://myaccount.google.com/apppasswords
+</Warning>
+
+### Mailgun
+
+Professional email delivery service:
+
+<CodeGroup>
+```bash .env
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.mailgun.org
+MAIL_PORT=587
+MAIL_USERNAME=postmaster@your-domain.mailgun.org
+MAIL_PASSWORD=your-mailgun-password
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS=noreply@yourdomain.com
+MAIL_FROM_NAME="${APP_NAME}"
+```
+</CodeGroup>
+
+### Mailtrap (Development)
+
+Email testing service for development:
+
+<CodeGroup>
+```bash .env
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.mailtrap.io
+MAIL_PORT=2525
+MAIL_USERNAME=your-mailtrap-username
+MAIL_PASSWORD=your-mailtrap-password
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS=dev@example.com
+MAIL_FROM_NAME="${APP_NAME}"
+```
+</CodeGroup>
+
+<Note>
+  Mailtrap captures all emails without delivering them. Perfect for testing email functionality.
+</Note>
+
+### Postmark
+
+Transactional email service with high deliverability:
+
+<CodeGroup>
+```bash .env
+MAIL_MAILER=postmark
+POSTMARK_TOKEN=your-postmark-server-token
+MAIL_FROM_ADDRESS=noreply@yourdomain.com
+MAIL_FROM_NAME="${APP_NAME}"
+```
+</CodeGroup>
+
+### Amazon SES
+
+AWS Simple Email Service:
+
+<CodeGroup>
+```bash .env
+MAIL_MAILER=ses
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+AWS_DEFAULT_REGION=us-east-1
+MAIL_FROM_ADDRESS=noreply@yourdomain.com
+MAIL_FROM_NAME="${APP_NAME}"
+```
+</CodeGroup>
+
+### Resend
+
+Modern email API:
+
+<CodeGroup>
+```bash .env
+MAIL_MAILER=resend
+RESEND_API_KEY=your-resend-api-key
+MAIL_FROM_ADDRESS=noreply@yourdomain.com
+MAIL_FROM_NAME="${APP_NAME}"
+```
+</CodeGroup>
+
+## Development Configuration
+
+For local development, use the log driver to preview emails:
+
+```bash .env
+MAIL_MAILER=log
+MAIL_LOG_CHANNEL=stack
+```
+
+Emails will be written to `storage/logs/laravel.log`:
+
+```bash
+# Watch email logs in real-time
+tail -f storage/logs/laravel.log | grep -A 50 "Message-ID"
+```
+
+## Testing Email Configuration
+
+Test your email configuration:
+
+```bash
+php artisan tinker
+```
+
+```php
+# Send a test email
+Mail::raw('Test email from SaaS Starter Vue', function ($message) {
+    $message->to('your-email@example.com')
+            ->subject('Email Configuration Test');
+});
+
+# Check for errors
+if (Mail::failures()) {
+    print_r(Mail::failures());
+} else {
+    echo "Email sent successfully!";
+}
+```
+
+## Email Types Sent by the Application
+
+The application sends various transactional emails:
+
+### Authentication Emails
+- **Email Verification** - Sent when new users register
+- **Password Reset** - Sent when users request password reset
+- **Two-Factor Authentication** - 2FA codes if enabled
+
+### Tenant Management Emails
+- **Tenant Created** - Welcome email for new tenants
+- **User Invitation** - Invite users to join a tenant
+- **Role Changed** - Notification when user role changes
+
+### Subscription Emails
+- **Subscription Created** - Confirmation of new subscription
+- **Subscription Renewed** - Renewal confirmation
+- **Subscription Canceled** - Cancellation confirmation
+- **Payment Failed** - Notification of failed payment
+- **Trial Ending Soon** - Reminder before trial expires
+
+### System Notifications
+- **Activity Alerts** - Important system activity
+- **Security Alerts** - Suspicious login attempts
+- **System Updates** - Maintenance notifications
+
+## Customizing Email Templates
+
+Email templates are located in `resources/views/emails/`:
+
+```bash
+# Publish vendor email views
+php artisan vendor:publish --tag=laravel-mail
+
+# Customize templates in:
+resources/views/vendor/mail/
+```
+
+## Email Queuing
+
+For better performance, queue emails instead of sending synchronously:
+
+```php
+// In your mailable class
+public function __construct()
+{
+    $this->queue();
+}
+```
+
+Ensure your queue is configured:
+
+```bash .env
+QUEUE_CONNECTION=database
+```
+
+Run the queue worker:
+
+```bash
+php artisan queue:work
+```
+
+<Note>
+  In production, use a process manager like Supervisor to keep the queue worker running.
+</Note>
+
+## Advanced Configuration
+
+### Multiple Mail Configurations
+
+Use different mail configurations for different email types:
+
+```php
+// config/mail.php
+'mailers' => [
+    'smtp' => [
+        // Your primary SMTP config
+    ],
+    'postmark' => [
+        'transport' => 'postmark',
+    ],
+],
+```
+
+Send via specific mailer:
+
+```php
+Mail::mailer('postmark')->send(new WelcomeEmail());
+```
+
+### Failover Configuration
+
+Automatically fallback to another mailer if the primary fails:
+
+```php
+// config/mail.php
+'mailers' => [
+    'failover' => [
+        'transport' => 'failover',
+        'mailers' => [
+            'postmark',
+            'smtp',
+            'log',
+        ],
+        'retry_after' => 60,
+    ],
+],
+```
+
+```bash .env
+MAIL_MAILER=failover
+```
+
+### Per-Tenant Email Configuration
+
+Configure different email settings per tenant:
+
+```php
+// In your tenant context
+Config::set('mail.from.address', $tenant->email_from_address);
+Config::set('mail.from.name', $tenant->email_from_name);
+```
+
+## Production Best Practices
+
+<Warning>
+  **Domain Authentication Required**: Configure SPF, DKIM, and DMARC records for your sending domain to ensure deliverability.
+</Warning>
+
+### SPF Record
+
+Add to your DNS:
+
+```dns
+v=spf1 include:_spf.mailgun.org ~all
+```
+
+### DKIM Record
+
+Obtain from your email provider and add to DNS.
+
+### DMARC Record
+
+```dns
+v=DMARC1; p=none; rua=mailto:dmarc@yourdomain.com
+```
+
+### Rate Limiting
+
+Implement rate limiting to prevent abuse:
+
+```php
+RateLimiter::for('emails', function ($job) {
+    return Limit::perMinute(100);
+});
+```
+
+### Email Verification
+
+Ensure your email sender identity is verified with your provider.
+
+### Monitoring
+
+- Track email delivery rates
+- Monitor bounce rates
+- Set up alerts for failed deliveries
+- Log all email sending attempts
+
+## Troubleshooting
+
+### Emails Not Sending
+
+```bash
+# Check logs
+tail -f storage/logs/laravel.log
+
+# Test connection
+php artisan tinker
+>>> Mail::raw('Test', fn($msg) => $msg->to('test@example.com')->subject('Test'));
+```
+
+### Connection Timeout
+
+- Verify SMTP host and port
+- Check firewall rules
+- Ensure the port is not blocked by your hosting provider
+
+### Authentication Failed
+
+- Verify username and password
+- Check if 2FA/app passwords are required
+- Ensure SMTP authentication is enabled
+
+### Emails Going to Spam
+
+- Configure SPF, DKIM, and DMARC
+- Use a reputable email service
+- Avoid spam trigger words
+- Include unsubscribe links
+- Maintain a good sender reputation
+
+## Environment Examples
+
+<CodeGroup>
+```bash Development (Mailtrap)
+MAIL_MAILER=smtp
+MAIL_HOST=sandbox.smtp.mailtrap.io
+MAIL_PORT=2525
+MAIL_USERNAME=your-username
+MAIL_PASSWORD=your-password
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS=dev@example.com
+MAIL_FROM_NAME="${APP_NAME}"
+```
+
+```bash Staging (Mailgun)
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.mailgun.org
+MAIL_PORT=587
+MAIL_USERNAME=postmaster@staging.yourdomain.com
+MAIL_PASSWORD=your-mailgun-password
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS=noreply@staging.yourdomain.com
+MAIL_FROM_NAME="${APP_NAME} Staging"
+```
+
+```bash Production (Postmark)
+MAIL_MAILER=postmark
+POSTMARK_TOKEN=your-production-token
+MAIL_FROM_ADDRESS=noreply@yourdomain.com
+MAIL_FROM_NAME="${APP_NAME}"
+```
+</CodeGroup>
+
+## Next Steps
+
+- Learn about [tenant management](/features/tenancy) to understand tenant-specific emails
+- Configure [background jobs](/features/queues) for email queuing
+- Set up [monitoring](/deployment/monitoring) to track email delivery

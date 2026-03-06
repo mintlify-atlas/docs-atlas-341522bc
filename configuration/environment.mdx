@@ -1,0 +1,244 @@
+---
+title: Environment Variables
+description: Configure your SaaS Starter Vue application with environment variables
+---
+
+The SaaS Starter Vue application uses Laravel's environment configuration system. All configuration values are stored in the `.env` file in your project root.
+
+## Initial Setup
+
+Copy the example environment file to create your configuration:
+
+```bash
+cp .env.example .env
+```
+
+After creating your `.env` file, generate an application key:
+
+```bash
+php artisan key:generate
+```
+
+## Application Settings
+
+<ParamField path="APP_NAME" type="string" default="Laravel">
+  The name of your application. This is used throughout the app and in email notifications.
+</ParamField>
+
+<ParamField path="APP_ENV" type="string" default="local">
+  The application environment. Use `local` for development, `staging` for staging, and `production` for production.
+  
+  <Note>This affects debug output and error reporting behavior.</Note>
+</ParamField>
+
+<ParamField path="APP_KEY" type="string" required>
+  The application encryption key. Auto-generated when you run `php artisan key:generate`.
+  
+  <Warning>Never commit this value to version control. Each environment should have a unique key.</Warning>
+</ParamField>
+
+<ParamField path="APP_DEBUG" type="boolean" default="true">
+  Enable or disable debug mode. Set to `false` in production to hide detailed error messages.
+  
+  <Warning>Always set to `false` in production to avoid exposing sensitive information.</Warning>
+</ParamField>
+
+## URL Configuration
+
+<ParamField path="APP_URL_BASE" type="string" default="saas-starter-vue.test">
+  The base domain for your application. This is used for tenant subdomain generation.
+</ParamField>
+
+<ParamField path="APP_URL" type="string" default="http://${APP_URL_BASE}">
+  The full URL of your application including protocol. Supports variable substitution from `APP_URL_BASE`.
+</ParamField>
+
+<CodeGroup>
+```bash Development
+APP_URL_BASE=saas-starter-vue.test
+APP_URL=http://${APP_URL_BASE}
+```
+
+```bash Production
+APP_URL_BASE=yoursaas.com
+APP_URL=https://${APP_URL_BASE}
+```
+</CodeGroup>
+
+## Localization
+
+<ParamField path="APP_LOCALE" type="string" default="en">
+  The default locale for your application.
+</ParamField>
+
+<ParamField path="APP_FALLBACK_LOCALE" type="string" default="en">
+  The fallback locale when a translation is not available in the current locale.
+</ParamField>
+
+<ParamField path="APP_FAKER_LOCALE" type="string" default="en_US">
+  The locale used by Faker for generating test data.
+</ParamField>
+
+## Security
+
+<ParamField path="BCRYPT_ROUNDS" type="integer" default="12">
+  The number of rounds for bcrypt password hashing. Higher values increase security but require more CPU.
+  
+  <Note>The default of 12 rounds provides good security for most applications.</Note>
+</ParamField>
+
+## Logging
+
+<ParamField path="LOG_CHANNEL" type="string" default="stack">
+  The default log channel. Options: `stack`, `single`, `daily`, `slack`, `syslog`, `errorlog`
+</ParamField>
+
+<ParamField path="LOG_STACK" type="string" default="daily">
+  When using the stack channel, this determines the channels to use.
+</ParamField>
+
+<ParamField path="LOG_DEPRECATIONS_CHANNEL" type="string" default="null">
+  Channel for logging PHP and Laravel deprecation warnings.
+</ParamField>
+
+<ParamField path="LOG_LEVEL" type="string" default="debug">
+  Minimum log level to record. Options: `debug`, `info`, `notice`, `warning`, `error`, `critical`, `alert`, `emergency`
+</ParamField>
+
+## Session & Cache
+
+<ParamField path="SESSION_DRIVER" type="string" default="database">
+  Where to store session data. Options: `file`, `cookie`, `database`, `memcached`, `redis`, `array`
+</ParamField>
+
+<ParamField path="SESSION_LIFETIME" type="integer" default="120">
+  Session lifetime in minutes.
+</ParamField>
+
+<ParamField path="CACHE_STORE" type="string" default="database">
+  The default cache store. Options: `file`, `database`, `redis`, `memcached`, `array`
+</ParamField>
+
+<ParamField path="QUEUE_CONNECTION" type="string" default="database">
+  Queue driver for background jobs. Options: `sync`, `database`, `redis`, `sqs`, `beanstalkd`
+</ParamField>
+
+## Storage & Broadcasting
+
+<ParamField path="FILESYSTEM_DISK" type="string" default="local">
+  Default filesystem disk for file storage. Options: `local`, `public`, `s3`
+</ParamField>
+
+<ParamField path="BROADCAST_CONNECTION" type="string" default="log">
+  Default broadcast driver for real-time events. Options: `pusher`, `redis`, `log`, `null`
+</ParamField>
+
+## AWS Configuration
+
+Required if using S3 for file storage:
+
+<ParamField path="AWS_ACCESS_KEY_ID" type="string">
+  Your AWS access key ID.
+</ParamField>
+
+<ParamField path="AWS_SECRET_ACCESS_KEY" type="string">
+  Your AWS secret access key.
+</ParamField>
+
+<ParamField path="AWS_DEFAULT_REGION" type="string" default="us-east-1">
+  The AWS region for your S3 bucket.
+</ParamField>
+
+<ParamField path="AWS_BUCKET" type="string">
+  The name of your S3 bucket.
+</ParamField>
+
+## Vite Build Configuration
+
+<ParamField path="VITE_APP_NAME" type="string" default="${APP_NAME}">
+  Application name passed to Vite for frontend builds.
+</ParamField>
+
+## Example Configuration
+
+<CodeGroup>
+```bash Local Development
+APP_NAME="My SaaS App"
+APP_ENV=local
+APP_KEY=base64:your-generated-key-here
+APP_DEBUG=true
+
+APP_URL_BASE=myapp.test
+APP_URL=http://${APP_URL_BASE}
+
+APP_LOCALE=en
+APP_FALLBACK_LOCALE=en
+
+LOG_CHANNEL=stack
+LOG_LEVEL=debug
+
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=myapp
+DB_USERNAME=postgres
+DB_PASSWORD=secret
+
+SESSION_DRIVER=database
+CACHE_STORE=database
+QUEUE_CONNECTION=database
+```
+
+```bash Production
+APP_NAME="My SaaS App"
+APP_ENV=production
+APP_KEY=base64:your-generated-key-here
+APP_DEBUG=false
+
+APP_URL_BASE=myapp.com
+APP_URL=https://${APP_URL_BASE}
+
+APP_LOCALE=en
+APP_FALLBACK_LOCALE=en
+
+LOG_CHANNEL=daily
+LOG_LEVEL=error
+
+DB_CONNECTION=pgsql
+DB_HOST=your-db-host.com
+DB_PORT=5432
+DB_DATABASE=myapp_prod
+DB_USERNAME=myapp_user
+DB_PASSWORD=secure-password-here
+
+SESSION_DRIVER=database
+CACHE_STORE=redis
+QUEUE_CONNECTION=redis
+
+REDIS_HOST=your-redis-host.com
+REDIS_PASSWORD=your-redis-password
+REDIS_PORT=6379
+```
+</CodeGroup>
+
+## Security Best Practices
+
+<Warning>
+  **Never commit your `.env` file to version control!** The `.env` file is already included in `.gitignore`.
+</Warning>
+
+<Note>
+  - Use different `APP_KEY` values for each environment
+  - Set `APP_DEBUG=false` in production
+  - Use strong, unique passwords for database and cache connections
+  - Store sensitive credentials in your hosting provider's secret management system
+  - Regularly rotate API keys and credentials
+</Note>
+
+## Next Steps
+
+After configuring your environment variables:
+
+1. [Set up your database](/configuration/database) connection and run migrations
+2. [Configure email](/configuration/email) for sending transactional emails
+3. Start the development server with `php artisan serve`

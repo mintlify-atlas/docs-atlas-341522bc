@@ -1,0 +1,721 @@
+---
+title: Frontend Development
+description: Guide to Vue 3, Inertia.js, and frontend architecture in SaaS Starter Vue
+---
+
+The frontend is built with **Vue 3**, **Inertia.js**, **TypeScript**, and **Tailwind CSS 4**, providing a modern, type-safe, and reactive user interface.
+
+## Tech Stack
+
+<CardGroup cols={2}>
+  <Card title="Vue 3" icon="vuejs">
+    Composition API, TypeScript support, and reactive state management
+  </Card>
+  
+  <Card title="Inertia.js" icon="link">
+    Server-side routing with SPA-like experience, no separate API needed
+  </Card>
+  
+  <Card title="Tailwind CSS 4" icon="paintbrush">
+    Utility-first CSS with custom design system
+  </Card>
+  
+  <Card title="TypeScript" icon="code">
+    Type safety for Vue components and application logic
+  </Card>
+</CardGroup>
+
+## Project Structure
+
+The frontend code lives in `resources/js/`:
+
+```
+resources/js/
+├── app.ts                  # Main entry point
+├── ssr.ts                  # SSR entry point
+├── components/             # Reusable components
+│   ├── ui/                 # shadcn-vue components
+│   ├── AppShell.vue
+│   ├── AppHeader.vue
+│   ├── AppSidebar.vue
+│   └── Breadcrumbs.vue
+├── composables/            # Vue composables (hooks)
+├── layouts/                # Page layouts
+├── pages/                  # Inertia pages
+├── lib/                    # Utility functions
+└── types/                  # TypeScript types
+```
+
+## Inertia.js Architecture
+
+Inertia.js bridges Laravel and Vue without building a separate API. Controllers return Inertia responses that render Vue components.
+
+### How It Works
+
+<Steps>
+  <Step title="Controller Returns Data">
+    Laravel controller returns an Inertia response with page component and props:
+    
+    ```php app/Http/Controllers/System/DashboardController.php
+    public function index()
+    {
+        $stats = [
+            'total_tenants' => Tenant::count(),
+            'active_tenants' => Tenant::where('status', 'Active')->count(),
+            'trial_tenants' => Tenant::where('status', 'Trial')->count(),
+        ];
+
+        return Inertia::render('system/Dashboard', [
+            'stats' => $stats,
+            'recentTenants' => $this->getRecentTenants(),
+        ]);
+    }
+    ```
+  </Step>
+
+  <Step title="Vue Component Receives Props">
+    The Vue component receives the data as typed props:
+    
+    ```vue resources/js/pages/system/Dashboard.vue
+    <script setup lang="ts">
+    import { Head } from '@inertiajs/vue3';
+    import AppLayout from '@/layouts/AppLayout.vue';
+
+    interface DashboardProps {
+        stats: {
+            total_tenants: number;
+            active_tenants: number;
+            trial_tenants: number;
+        };
+        recentTenants: Array<{
+            id: string;
+            name: string;
+            status: string;
+        }>;
+    }
+
+    defineProps<DashboardProps>();
+    </script>
+
+    <template>
+        <Head title="Dashboard" />
+        
+        <AppLayout>
+            <div class="grid gap-4 md:grid-cols-3">
+                <Card>
+                    <CardTitle>Total Tenants</CardTitle>
+                    <div class="text-2xl font-bold">{{ stats.total_tenants }}</div>
+                </Card>
+                <!-- More cards... -->
+            </div>
+        </AppLayout>
+    </template>
+    ```
+  </Step>
+
+  <Step title="Navigation Updates Without Full Reload">
+    Inertia intercepts links and form submissions, making XHR requests and swapping components:
+    
+    ```vue
+    <template>
+        <!-- Inertia handles navigation -->
+        <Link href="/plans" class="nav-link">Plans</Link>
+        
+        <!-- Forms work seamlessly -->
+        <form @submit.prevent="form.post('/tenants')">
+            <input v-model="form.name" />
+            <button type="submit">Create Tenant</button>
+        </form>
+    </template>
+    ```
+  </Step>
+</Steps>
+
+### Benefits of Inertia
+
+<AccordionGroup>
+  <Accordion title="No API Needed">
+    Controllers return data directly to Vue components. No need to build REST or GraphQL APIs.
+  </Accordion>
+
+  <Accordion title="Server-Side Routing">
+    Routes are defined in Laravel. No need to sync frontend and backend route definitions.
+  </Accordion>
+
+  <Accordion title="Type-Safe Routing with Wayfinder">
+    Generate type-safe route helpers from Laravel routes:
+    
+    ```typescript
+    import { dashboard, tenants } from '@/routes';
+    
+    // Type-safe navigation
+    router.visit(dashboard().url);
+    router.visit(tenants.show({ tenant: '123' }).url);
+    ```
+  </Accordion>
+
+  <Accordion title="Shared Data">
+    Share data across all pages via middleware:
+    
+    ```php
+    Inertia::share([
+        'auth.user' => fn () => auth()->user(),
+        'flash.message' => fn () => session('message'),
+    ]);
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Vue Components
+
+### Component Structure
+
+Components follow the Composition API with `<script setup>` syntax:
+
+```vue resources/js/components/AppHeader.vue
+<script setup lang="ts">
+import { computed } from 'vue';
+import { usePage } from '@inertiajs/vue3';
+import type { User } from '@/types';
+
+interface Props {
+    title?: string;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+    title: 'Dashboard',
+});
+
+const page = usePage();
+const user = computed(() => page.props.auth?.user as User);
+</script>
+
+<template>
+    <header class="border-b bg-background">
+        <div class="flex h-16 items-center px-4">
+            <h1 class="text-xl font-semibold">{{ title }}</h1>
+            <div class="ml-auto flex items-center gap-4">
+                <span>{{ user?.name }}</span>
+            </div>
+        </div>
+    </header>
+</template>
+```
+
+### UI Component Library
+
+The project uses **shadcn-vue** components located in `resources/js/components/ui/`:
+
+<Tabs>
+  <Tab title="Card">
+    ```vue
+    <Card>
+        <CardHeader>
+            <CardTitle>Total Tenants</CardTitle>
+            <CardDescription>Registered businesses</CardDescription>
+        </CardHeader>
+        <CardContent>
+            <div class="text-2xl font-bold">{{ stats.total_tenants }}</div>
+        </CardContent>
+    </Card>
+    ```
+  </Tab>
+
+  <Tab title="Table">
+    ```vue
+    <Table>
+        <TableHeader>
+            <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Status</TableHead>
+            </TableRow>
+        </TableHeader>
+        <TableBody>
+            <TableRow v-for="tenant in tenants" :key="tenant.id">
+                <TableCell>{{ tenant.name }}</TableCell>
+                <TableCell>
+                    <Badge :variant="getStatusVariant(tenant.status)">
+                        {{ tenant.status }}
+                    </Badge>
+                </TableCell>
+            </TableRow>
+        </TableBody>
+    </Table>
+    ```
+  </Tab>
+
+  <Tab title="Form">
+    ```vue
+    <form @submit.prevent="form.post('/tenants')">
+        <div class="space-y-4">
+            <div>
+                <Label for="name">Tenant Name</Label>
+                <Input
+                    id="name"
+                    v-model="form.name"
+                    type="text"
+                    required
+                />
+                <InputError :message="form.errors.name" />
+            </div>
+            
+            <Button type="submit" :disabled="form.processing">
+                Create Tenant
+            </Button>
+        </div>
+    </form>
+    ```
+  </Tab>
+
+  <Tab title="Dialog">
+    ```vue
+    <Dialog v-model:open="isOpen">
+        <DialogTrigger as-child>
+            <Button>Open Dialog</Button>
+        </DialogTrigger>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Delete Tenant</DialogTitle>
+                <DialogDescription>
+                    This action cannot be undone.
+                </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+                <Button variant="outline" @click="isOpen = false">Cancel</Button>
+                <Button variant="destructive" @click="deleteTenant">Delete</Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
+    ```
+  </Tab>
+</Tabs>
+
+### Available Components
+
+<CardGroup cols={3}>
+  <Card title="Layout" icon="layout">
+    Card, Sheet, Tabs, Separator, Accordion
+  </Card>
+  <Card title="Forms" icon="input">
+    Input, Textarea, Select, Checkbox, Radio, Switch
+  </Card>
+  <Card title="Feedback" icon="bell">
+    Alert, Toast, Dialog, Popover, Tooltip
+  </Card>
+  <Card title="Navigation" icon="compass">
+    Breadcrumb, Dropdown Menu, Navigation Menu
+  </Card>
+  <Card title="Data Display" icon="table">
+    Table, Badge, Avatar, Calendar
+  </Card>
+  <Card title="Controls" icon="mouse-pointer">
+    Button, Command, Context Menu, Slider
+  </Card>
+</CardGroup>
+
+## Layouts
+
+Layouts provide consistent structure across pages:
+
+### AppLayout (System)
+
+```vue resources/js/layouts/AppLayout.vue
+<script setup lang="ts">
+import AppLayout from '@/layouts/app/AppSidebarLayout.vue';
+import type { BreadcrumbItem } from '@/types';
+
+type Props = {
+    breadcrumbs?: BreadcrumbItem[];
+};
+
+withDefaults(defineProps<Props>(), {
+    breadcrumbs: () => [],
+});
+</script>
+
+<template>
+    <AppLayout :breadcrumbs="breadcrumbs">
+        <slot />
+    </AppLayout>
+</template>
+```
+
+### Usage in Pages
+
+```vue resources/js/pages/system/Dashboard.vue
+<script setup lang="ts">
+import { Head } from '@inertiajs/vue3';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { dashboard } from '@/routes';
+
+const breadcrumbs = [
+    { title: 'Dashboard', href: dashboard().url },
+];
+</script>
+
+<template>
+    <Head title="Dashboard" />
+    
+    <AppLayout :breadcrumbs="breadcrumbs">
+        <!-- Page content -->
+    </AppLayout>
+</template>
+```
+
+## Composables
+
+Reusable logic extracted into composables (Vue's equivalent of React hooks):
+
+### useAppearance
+
+```typescript resources/js/composables/useAppearance.ts
+import { ref } from 'vue';
+
+type Theme = 'light' | 'dark' | 'system';
+
+export function useAppearance() {
+    const theme = ref<Theme>('system');
+
+    const setTheme = (newTheme: Theme) => {
+        theme.value = newTheme;
+        localStorage.setItem('theme', newTheme);
+        applyTheme(newTheme);
+    };
+
+    const applyTheme = (theme: Theme) => {
+        const root = window.document.documentElement;
+        root.classList.remove('light', 'dark');
+
+        if (theme === 'system') {
+            const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
+            root.classList.add(systemTheme);
+        } else {
+            root.classList.add(theme);
+        }
+    };
+
+    return { theme, setTheme };
+}
+
+export function initializeTheme() {
+    const savedTheme = localStorage.getItem('theme') as Theme || 'system';
+    const { setTheme } = useAppearance();
+    setTheme(savedTheme);
+}
+```
+
+### useTwoFactorAuth
+
+```typescript resources/js/composables/useTwoFactorAuth.ts
+import { ref } from 'vue';
+import { router } from '@inertiajs/vue3';
+
+export function useTwoFactorAuth() {
+    const enabling = ref(false);
+    const disabling = ref(false);
+
+    const enable = () => {
+        enabling.value = true;
+        router.post('/user/two-factor-authentication', {}, {
+            onFinish: () => (enabling.value = false),
+        });
+    };
+
+    const disable = () => {
+        disabling.value = true;
+        router.delete('/user/two-factor-authentication', {
+            onFinish: () => (disabling.value = false),
+        });
+    };
+
+    return { enabling, disabling, enable, disable };
+}
+```
+
+## Tailwind CSS
+
+The project uses **Tailwind CSS 4** with custom configuration:
+
+### Configuration
+
+```typescript vite.config.ts
+import tailwindcss from '@tailwindcss/vite';
+
+export default defineConfig({
+    plugins: [
+        tailwindcss(),
+        // other plugins
+    ],
+});
+```
+
+### Utility Classes
+
+<Tabs>
+  <Tab title="Layout">
+    ```vue
+    <div class="container mx-auto px-4">
+        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card>...</Card>
+        </div>
+    </div>
+    ```
+  </Tab>
+
+  <Tab title="Typography">
+    ```vue
+    <h1 class="text-3xl font-bold tracking-tight">Dashboard</h1>
+    <p class="text-sm text-muted-foreground">Welcome back</p>
+    ```
+  </Tab>
+
+  <Tab title="Colors">
+    ```vue
+    <Button class="bg-primary text-primary-foreground">
+        Primary
+    </Button>
+    <Button variant="destructive">
+        Delete
+    </Button>
+    <Badge variant="secondary">
+        Trial
+    </Badge>
+    ```
+  </Tab>
+
+  <Tab title="Dark Mode">
+    ```vue
+    <div class="bg-background text-foreground">
+        <Card class="border-border">
+            <!-- Automatically adapts to theme -->
+        </Card>
+    </div>
+    ```
+  </Tab>
+</Tabs>
+
+### Custom Utilities
+
+Use `clsx` and `tailwind-merge` for conditional classes:
+
+```typescript resources/js/lib/utils.ts
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+export function cn(...inputs: ClassValue[]) {
+    return twMerge(clsx(inputs));
+}
+
+// Usage
+const buttonClass = cn(
+    'px-4 py-2 rounded',
+    variant === 'primary' && 'bg-blue-500 text-white',
+    variant === 'secondary' && 'bg-gray-200 text-gray-900',
+    disabled && 'opacity-50 cursor-not-allowed'
+);
+```
+
+## Form Handling
+
+Inertia provides a `useForm` helper for managing form state:
+
+```vue resources/js/pages/system/tenants/Create.vue
+<script setup lang="ts">
+import { useForm } from '@inertiajs/vue3';
+import { tenants } from '@/routes';
+
+const form = useForm({
+    name: '',
+    owner_name: '',
+    owner_email: '',
+    owner_password: '',
+    plan_id: null,
+});
+
+const submit = () => {
+    form.post(tenants.store().url, {
+        onSuccess: () => {
+            // Handle success
+        },
+    });
+};
+</script>
+
+<template>
+    <form @submit.prevent="submit">
+        <div class="space-y-4">
+            <div>
+                <Label for="name">Tenant Name</Label>
+                <Input
+                    id="name"
+                    v-model="form.name"
+                    :disabled="form.processing"
+                />
+                <InputError :message="form.errors.name" />
+            </div>
+            
+            <Button type="submit" :disabled="form.processing">
+                <Loader v-if="form.processing" class="mr-2 h-4 w-4 animate-spin" />
+                Create Tenant
+            </Button>
+        </div>
+    </form>
+</template>
+```
+
+### Form Features
+
+- **Automatic CSRF protection**: Handled by Inertia
+- **Validation errors**: Automatically populated in `form.errors`
+- **Loading states**: Track submission with `form.processing`
+- **Optimistic updates**: Update UI before server response
+- **File uploads**: Support for `multipart/form-data`
+
+## TypeScript
+
+The project uses TypeScript for type safety:
+
+```typescript resources/js/types/index.ts
+export interface User {
+    id: string;
+    name: string;
+    email: string;
+    email_verified_at: string | null;
+    two_factor_enabled: boolean;
+}
+
+export interface Tenant {
+    id: string;
+    name: string;
+    owner_email: string;
+    status: 'Active' | 'Trial' | 'Canceled';
+    plan: Plan;
+    created_at: string;
+}
+
+export interface Plan {
+    id: string;
+    name: string;
+    price: number;
+    features: Feature[];
+}
+
+export interface BreadcrumbItem {
+    title: string;
+    href?: string;
+}
+```
+
+### Type-Safe Props
+
+```vue
+<script setup lang="ts">
+import type { Tenant } from '@/types';
+
+interface Props {
+    tenants: Tenant[];
+    total: number;
+}
+
+const props = defineProps<Props>();
+
+// Full type safety
+const activeTenants = props.tenants.filter(t => t.status === 'Active');
+</script>
+```
+
+## Build Configuration
+
+Vite powers the frontend build process:
+
+```typescript vite.config.ts
+import { wayfinder } from '@laravel/vite-plugin-wayfinder';
+import tailwindcss from '@tailwindcss/vite';
+import vue from '@vitejs/plugin-vue';
+import laravel from 'laravel-vite-plugin';
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+    plugins: [
+        laravel({
+            input: ['resources/js/app.ts'],
+            ssr: 'resources/js/ssr.ts',
+            refresh: true,
+        }),
+        tailwindcss(),
+        wayfinder({ formVariants: true }),
+        vue({
+            template: {
+                transformAssetUrls: {
+                    base: null,
+                    includeAbsolute: false,
+                },
+            },
+        }),
+    ],
+});
+```
+
+### Development
+
+```bash
+pnpm run dev
+```
+
+### Production Build
+
+```bash
+pnpm run build
+```
+
+### SSR Build
+
+```bash
+pnpm run build:ssr
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Component Organization">
+    - Keep components small and focused
+    - Use composition API with `<script setup>`
+    - Extract reusable logic into composables
+    - Define TypeScript interfaces for props
+  </Accordion>
+
+  <Accordion title="State Management">
+    - Use local state with `ref()` and `reactive()`
+    - Share state across components with composables
+    - Use Inertia's shared data for global state
+    - Avoid prop drilling with `provide/inject`
+  </Accordion>
+
+  <Accordion title="Performance">
+    - Use `v-memo` for expensive renders
+    - Lazy load routes with dynamic imports
+    - Optimize images with proper sizing
+    - Use `<Suspense>` for async components
+  </Accordion>
+
+  <Accordion title="Type Safety">
+    - Define interfaces for all props
+    - Use TypeScript for composables
+    - Type Inertia page props
+    - Enable strict mode in `tsconfig.json`
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Backend Development" icon="server" href="/development/backend">
+    Learn about Laravel controllers and services
+  </Card>
+  
+  <Card title="Testing" icon="flask" href="/development/testing">
+    Write tests for Vue components and pages
+  </Card>
+</CardGroup>

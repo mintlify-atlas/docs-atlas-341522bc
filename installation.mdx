@@ -1,0 +1,308 @@
+---
+title: Installation
+description: Set up your development environment and install SaaS Starter Vue
+---
+
+# Installation
+
+Get SaaS Starter Vue up and running on your local machine by following these installation steps.
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed on your development machine:
+
+<CardGroup cols={2}>
+  <Card title="PHP" icon="php">
+    **Version 8.2 or higher**
+    
+    Check your version:
+    ```bash
+    php --version
+    ```
+  </Card>
+  <Card title="Composer" icon="box">
+    **Latest version**
+    
+    Package manager for PHP:
+    ```bash
+    composer --version
+    ```
+  </Card>
+  <Card title="Node.js" icon="node-js">
+    **Version 18 or higher**
+    
+    Required for frontend build:
+    ```bash
+    node --version
+    ```
+  </Card>
+  <Card title="PNPM" icon="package">
+    **Latest version**
+    
+    Fast package manager:
+    ```bash
+    pnpm --version
+    ```
+  </Card>
+</CardGroup>
+
+### Database Requirement
+
+<Note>
+  SaaS Starter Vue is configured to use **PostgreSQL** by default. Make sure you have PostgreSQL installed and running.
+</Note>
+
+```bash
+# Check PostgreSQL is running
+psql --version
+```
+
+If you don't have PNPM installed, you can install it globally:
+
+```bash
+npm install -g pnpm
+```
+
+## Installation Steps
+
+<Steps>
+  <Step title="Clone the Repository">
+    Clone the SaaS Starter Vue repository to your local machine:
+    
+    ```bash
+    git clone https://github.com/zrclouddev-oss/saas-starter-vue.git
+    cd saas-starter-vue
+    ```
+  </Step>
+
+  <Step title="Configure Environment Variables">
+    Copy the example environment file and configure your settings:
+    
+    ```bash
+    cp .env.example .env
+    ```
+    
+    Open `.env` and configure your database connection:
+    
+    ```ini .env
+    APP_NAME="SaaS Starter Vue"
+    APP_ENV=local
+    APP_DEBUG=true
+    
+    # Application URL Configuration
+    APP_URL_BASE=saas-starter-vue.test
+    APP_URL=http://${APP_URL_BASE}
+    
+    # Database Configuration
+    DB_CONNECTION=pgsql
+    DB_HOST=127.0.0.1
+    DB_PORT=5432
+    DB_DATABASE=your_database_name
+    DB_USERNAME=your_username
+    DB_PASSWORD=your_password
+    
+    # Queue Configuration
+    QUEUE_CONNECTION=database
+    
+    # Mail Configuration
+    MAIL_MAILER=smtp
+    MAIL_HOST=127.0.0.1
+    MAIL_PORT=2525
+    MAIL_FROM_ADDRESS="hello@example.com"
+    MAIL_FROM_NAME="${APP_NAME}"
+    ```
+    
+    <Warning>
+      Make sure to create the PostgreSQL database before running migrations:
+      
+      ```bash
+      createdb your_database_name
+      ```
+    </Warning>
+  </Step>
+
+  <Step title="Run Automated Setup">
+    SaaS Starter Vue includes a convenient setup script that handles all installation tasks:
+    
+    ```bash
+    composer run setup
+    ```
+    
+    This command automatically:
+    - Installs PHP dependencies via Composer
+    - Generates application key
+    - Runs database migrations (creates all tables)
+    - Installs frontend dependencies via PNPM
+    - Builds frontend assets
+    
+    <Note>
+      The setup process may take a few minutes depending on your internet connection and system performance.
+    </Note>
+  </Step>
+
+  <Step title="Verify Installation">
+    After setup completes, verify everything is installed correctly:
+    
+    ```bash
+    # Check backend dependencies
+    composer show
+    
+    # Check frontend dependencies
+    pnpm list
+    
+    # Check database connection
+    php artisan db:show
+    ```
+  </Step>
+</Steps>
+
+## Manual Installation (Alternative)
+
+If you prefer to run installation steps manually, or if the automated setup encounters issues:
+
+<Steps>
+  <Step title="Install Backend Dependencies">
+    ```bash
+    composer install
+    ```
+  </Step>
+  
+  <Step title="Generate Application Key">
+    ```bash
+    php artisan key:generate
+    ```
+  </Step>
+  
+  <Step title="Run Database Migrations">
+    ```bash
+    php artisan migrate
+    ```
+  </Step>
+  
+  <Step title="Install Frontend Dependencies">
+    ```bash
+    pnpm install
+    ```
+  </Step>
+  
+  <Step title="Build Frontend Assets">
+    ```bash
+    pnpm run build
+    ```
+  </Step>
+</Steps>
+
+## Configuration Details
+
+### Multi-Tenancy Setup
+
+The application uses `stancl/tenancy` for multi-tenant architecture. Tenancy is automatically configured, and migrations create both central and tenant databases:
+
+- **Central Database**: Stores system users, tenants, and plans
+- **Tenant Databases**: Each tenant gets an isolated database schema
+
+<Note>
+  Tenant databases are created automatically when you create a new tenant through the admin dashboard.
+</Note>
+
+### Queue Configuration
+
+By default, the application uses database queues:
+
+```ini .env
+QUEUE_CONNECTION=database
+```
+
+Queues are required for:
+- Sending emails (password resets, verifications)
+- Tenant provisioning tasks
+- Background processing
+
+### Session Configuration
+
+Sessions are stored in the database for better scalability:
+
+```ini .env
+SESSION_DRIVER=database
+SESSION_LIFETIME=120
+```
+
+## Development Tools
+
+### Code Quality Tools
+
+The project includes several tools for maintaining code quality:
+
+```bash
+# PHP linting (Laravel Pint)
+composer run lint
+
+# Run tests
+composer run test
+
+# Frontend formatting (Prettier)
+pnpm run format
+
+# Frontend format check
+pnpm run format:check
+```
+
+## Troubleshooting
+
+### Common Issues
+
+<AccordionGroup>
+  <Accordion title="Database connection failed">
+    **Solution**: Verify your PostgreSQL credentials in `.env` and ensure the database exists:
+    
+    ```bash
+    # Check if database exists
+    psql -U your_username -l
+    
+    # Create database if needed
+    createdb your_database_name
+    ```
+  </Accordion>
+  
+  <Accordion title="PNPM not found">
+    **Solution**: Install PNPM globally:
+    
+    ```bash
+    npm install -g pnpm
+    ```
+  </Accordion>
+  
+  <Accordion title="Permission denied errors">
+    **Solution**: Ensure storage and cache directories are writable:
+    
+    ```bash
+    chmod -R 775 storage bootstrap/cache
+    ```
+  </Accordion>
+  
+  <Accordion title="Migration errors">
+    **Solution**: Reset the database and run migrations again:
+    
+    ```bash
+    php artisan migrate:fresh
+    ```
+    
+    <Warning>
+      This will drop all tables and data. Only use in development!
+    </Warning>
+  </Accordion>
+</AccordionGroup>
+
+### Getting Help
+
+If you encounter issues not covered here:
+
+1. Check the [GitHub Issues](https://github.com/zrclouddev-oss/saas-starter-vue/issues)
+2. Review Laravel 12 and Vue 3 documentation
+3. Verify all prerequisites are correctly installed
+
+## Next Steps
+
+<Card title="Quick Start Guide" icon="rocket" href="/quickstart">
+  Now that installation is complete, follow the quickstart guide to run the application and create your first tenant.
+</Card>

@@ -1,0 +1,186 @@
+---
+title: UI Components Overview
+description: Explore the comprehensive UI component library built with reka-ui and Tailwind CSS 4
+---
+
+## Introduction
+
+SaaS Starter Vue comes with a rich collection of pre-built UI components based on **reka-ui** (a Vue 3 headless UI library) and styled with **Tailwind CSS 4**. These components provide a solid foundation for building modern, accessible, and responsive interfaces.
+
+## Component Libraries
+
+The project uses several key libraries for the UI layer:
+
+- **reka-ui** - Headless UI components with full accessibility support
+- **Tailwind CSS 4** - Utility-first CSS framework for styling
+- **class-variance-authority** (CVA) - For managing component variants
+- **lucide-vue-next** - Icon library
+- **vue-sonner** - Toast notifications
+- **@tanstack/vue-table** - Powerful table component
+
+## Component Architecture
+
+All UI components follow a consistent pattern:
+
+1. **Base Components** - Located in `resources/js/components/ui/`
+2. **Variant System** - Using CVA for type-safe variant props
+3. **Styling** - Tailwind classes with dark mode support
+4. **Accessibility** - Built-in ARIA attributes and keyboard navigation
+
+## Available Component Categories
+
+### Form Components
+
+- Input
+- Textarea
+- Select
+- Checkbox
+- Radio Group
+- Switch
+- Label
+- Form (with validation)
+
+[Learn more about form components](/components/forms)
+
+### Buttons & Actions
+
+- Button (with multiple variants)
+- Toggle
+- Toggle Group
+
+[Learn more about buttons](/components/buttons)
+
+### Overlays & Dialogs
+
+- Dialog (Modal)
+- Sheet (Slide-over)
+- Popover
+- Dropdown Menu
+- Context Menu
+- Tooltip
+
+[Learn more about modals and dialogs](/components/modals)
+
+### Navigation
+
+- Breadcrumb
+- Navigation Menu
+- Menubar
+- Sidebar
+- Tabs
+- Pagination
+
+### Feedback
+
+- Alert
+- Toast (Sonner)
+- Progress
+- Spinner
+- Skeleton
+
+### Data Display
+
+- Table
+- Card
+- Badge
+- Avatar
+- Accordion
+- Collapsible
+- Separator
+
+### Layout
+
+- Card
+- Separator
+
+## Component Location
+
+All base UI components are located in:
+
+```
+resources/js/components/ui/
+├── button/
+│   ├── Button.vue
+│   └── index.ts
+├── input/
+│   └── Input.vue
+├── dialog/
+│   ├── Dialog.vue
+│   ├── DialogContent.vue
+│   ├── DialogHeader.vue
+│   └── ...
+└── ...
+```
+
+## Importing Components
+
+Components are imported from their respective directories:
+
+```vue
+<script setup lang="ts">
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
+</script>
+```
+
+## Styling System
+
+All components use a centralized styling approach:
+
+- **Base styles** - Defined in component files using Tailwind classes
+- **Variants** - Managed with class-variance-authority (CVA)
+- **Dark mode** - Full support with `dark:` variant classes
+- **Focus states** - Accessible focus indicators with ring utilities
+- **Animations** - Using tw-animate-css for smooth transitions
+
+## Utility Functions
+
+The `cn()` utility function (from `@/lib/utils`) is used throughout to merge Tailwind classes:
+
+```typescript
+import { cn } from '@/lib/utils'
+
+// Merge classes with proper precedence
+const classes = cn(
+  'base-class',
+  variant && variantClasses[variant],
+  props.class
+)
+```
+
+## Accessibility Features
+
+All components are built with accessibility in mind:
+
+- Proper ARIA attributes
+- Keyboard navigation support
+- Focus management
+- Screen reader announcements
+- Semantic HTML structure
+
+## Dark Mode Support
+
+Every component includes dark mode variants:
+
+```vue
+<template>
+  <div class="bg-background text-foreground dark:bg-input/30">
+    <!-- Content -->
+  </div>
+</template>
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Form Components" icon="input-text" href="/components/forms">
+    Learn about input fields, validation, and form handling
+  </Card>
+  <Card title="Buttons" icon="hand-pointer" href="/components/buttons">
+    Explore button variants and usage patterns
+  </Card>
+  <Card title="Modals & Dialogs" icon="window" href="/components/modals">
+    Work with dialogs, sheets, and overlays
+  </Card>
+</CardGroup>

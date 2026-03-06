@@ -1,0 +1,785 @@
+---
+title: Backend Development
+description: Laravel architecture, models, controllers, and multi-tenancy in SaaS Starter Vue
+---
+
+The backend is built on **Laravel 12** with a multi-tenant architecture using the **Stancl Tenancy** package. Each tenant operates in an isolated database while sharing the same application codebase.
+
+## Architecture Overview
+
+<CardGroup cols={2}>
+  <Card title="Multi-Tenancy" icon="database">
+    Database-per-tenant strategy with automatic tenant identification
+  </Card>
+  
+  <Card title="Domain-Based Routing" icon="route">
+    Separate route files for system and tenant domains
+  </Card>
+  
+  <Card title="Service Layer" icon="layer-group">
+    Business logic encapsulated in service classes
+  </Card>
+  
+  <Card title="Inertia Integration" icon="link">
+    Server-side rendering with Vue components
+  </Card>
+</CardGroup>
+
+## Multi-Tenancy
+
+The application uses **Stancl Tenancy** to provide database isolation for each customer.
+
+### How It Works
+
+<Steps>
+  <Step title="Tenant Identification">
+    The tenancy middleware identifies tenants by subdomain:
+    
+    ```
+    customer1.yoursaas.com → Tenant Database: tenant_customer1
+    customer2.yoursaas.com → Tenant Database: tenant_customer2
+    app.yoursaas.com       → Central Database (System)
+    ```
+  </Step>
+
+  <Step title="Database Switching">
+    Stancl automatically switches database connections based on the current tenant:
+    
+    ```php
+    // Automatically uses tenant's database
+    Route::middleware(['web', 'tenant'])->group(function () {
+        Route::get('/dashboard', [TenantDashboardController::class, 'index']);
+    });
+    ```
+  </Step>
+
+  <Step title="Isolated Data">
+    Each tenant's data is completely isolated:
+    
+    ```php
+    // In tenant context, queries only access tenant's database
+    $users = User::all(); // Only users from current tenant
+    ```
+  </Step>
+</Steps>
+
+### Tenant Model
+
+```php app/Models/System/Tenant.php
+namespace App\Models\System;
+
+use Stancl\Tenancy\Database\Models\Tenant as BaseTenant;
+use Stancl\Tenancy\Contracts\TenantWithDatabase;
+use Stancl\Tenancy\Database\Concerns\HasDatabase;
+use Stancl\Tenancy\Database\Concerns\HasDomains;
+
+class Tenant extends BaseTenant implements TenantWithDatabase
+{
+    use HasDatabase, HasDomains;
+
+    protected $casts = [
+        'subscription_ends_at' => 'datetime',
+        'trial_ends_at' => 'datetime',
+        'canceled_at' => 'datetime',
+    ];
+
+    /**
+     * Define custom columns for the tenants table.
+     */
+    public static function getCustomColumns(): array
+    {
+        return [
+            'id',
+            'name',
+            'tenancy_db_name',
+            'plan_id',
+            'owner_name',
+            'owner_email',
+            'owner_password',
+            'status',
+            'subscription_ends_at',
+            'trial_ends_at',
+            'canceled_at',
+            'is_active',
+        ];
+    }
+
+    public function plan()
+    {
+        return $this->belongsTo(Plan::class);
+    }
+
+    public function subscriptions()
+    {
+        return $this->hasMany(Subscription::class);
+    }
+}
+```
+
+## Models
+
+Models are organized into `System` and `Tenant` namespaces:
+
+### System Models (Central Database)
+
+<Tabs>
+  <Tab title="Tenant">
+    ```php app/Models/System/Tenant.php
+    class Tenant extends BaseTenant implements TenantWithDatabase
+    {
+        use HasDatabase, HasDomains;
+
+        protected $fillable = [
+            'name',
+            'owner_name',
+            'owner_email',
+            'owner_password',
+            'plan_id',
+            'status',
+        ];
+
+        public function plan()
+        {
+            return $this->belongsTo(Plan::class);
+        }
+
+        public function domains()
+        {
+            return $this->hasMany(Domain::class);
+        }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Plan">
+    ```php app/Models/System/Plan.php
+    class Plan extends Model
+    {
+        protected $fillable = [
+            'name',
+            'description',
+            'price',
+            'billing_period',
+            'trial_days',
+        ];
+
+        protected $casts = [
+            'price' => 'decimal:2',
+            'trial_days' => 'integer',
+        ];
+
+        public function features()
+        {
+            return $this->hasMany(Feature::class);
+        }
+
+        public function tenants()
+        {
+            return $this->hasMany(Tenant::class);
+        }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Feature">
+    ```php app/Models/System/Feature.php
+    class Feature extends Model
+    {
+        protected $fillable = [
+            'plan_id',
+            'name',
+            'description',
+            'value',
+        ];
+
+        public function plan()
+        {
+            return $this->belongsTo(Plan::class);
+        }
+    }
+    ```
+  </Tab>
+
+  <Tab title="User">
+    ```php app/Models/System/User.php
+    class User extends Authenticatable
+    {
+        use HasFactory, Notifiable, TwoFactorAuthenticatable;
+
+        protected $fillable = [
+            'name',
+            'email',
+            'password',
+        ];
+
+        protected $hidden = [
+            'password',
+            'remember_token',
+        ];
+
+        protected $casts = [
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+        ];
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Tenant Models (Tenant Databases)
+
+```php app/Models/Tenant/User.php
+namespace App\Models\Tenant;
+
+use Illuminate\Foundation\Auth\User as Authenticatable;
+
+class User extends Authenticatable
+{
+    use HasFactory, Notifiable;
+
+    protected $fillable = [
+        'name',
+        'email',
+        'password',
+    ];
+
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+        'password' => 'hashed',
+    ];
+}
+```
+
+<Note>
+  **Important**: Tenant models use the tenant database connection, automatically set by Stancl Tenancy middleware.
+</Note>
+
+## Controllers
+
+Controllers are organized by domain (System vs Tenant) and responsibility:
+
+### System Controllers
+
+```php app/Http/Controllers/System/DashboardController.php
+namespace App\Http\Controllers\System;
+
+use App\Http\Controllers\Controller;
+use App\Models\System\Tenant;
+use Illuminate\Support\Facades\DB;
+use Inertia\Inertia;
+
+class DashboardController extends Controller
+{
+    /**
+     * Display the system dashboard with key metrics.
+     */
+    public function index()
+    {
+        // 1. Key Performance Indicators (KPIs)
+        $stats = [
+            'total_tenants' => Tenant::count(),
+            'active_tenants' => Tenant::where('status', 'Active')->count(),
+            'trial_tenants' => Tenant::where('status', 'Trial')->count(),
+            'new_tenants_this_month' => Tenant::where(
+                'created_at', '>=', now()->startOfMonth()
+            )->count(),
+        ];
+
+        // 2. Recent Tenants (Last 5)
+        $recentTenants = Tenant::with('plan')
+            ->latest()
+            ->take(5)
+            ->get()
+            ->map(function ($tenant) {
+                return [
+                    'id' => $tenant->id,
+                    'name' => $tenant->name,
+                    'email' => $tenant->owner_email,
+                    'status' => $tenant->status,
+                    'plan_name' => $tenant->plan?->name ?? 'N/A',
+                    'created_at' => $tenant->created_at->diffForHumans(),
+                ];
+            });
+
+        // 3. Plan Distribution
+        $planDistribution = Tenant::select('plan_id', DB::raw('count(*) as count'))
+            ->groupBy('plan_id')
+            ->with('plan')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'name' => $item->plan?->name ?? 'No Plan',
+                    'count' => $item->count,
+                ];
+            });
+
+        return Inertia::render('system/Dashboard', [
+            'stats' => $stats,
+            'recentTenants' => $recentTenants,
+            'planDistribution' => $planDistribution,
+        ]);
+    }
+}
+```
+
+### Resource Controllers
+
+Use Laravel's resource controller pattern:
+
+```php app/Http/Controllers/System/TenantController.php
+class TenantController extends Controller
+{
+    public function __construct(
+        private TenantService $tenantService
+    ) {}
+
+    public function index(Request $request)
+    {
+        $tenants = $this->tenantService->listTenants([
+            'search' => $request->input('search'),
+            'status' => $request->input('status'),
+            'plan_id' => $request->input('plan_id'),
+        ]);
+
+        return Inertia::render('system/tenants/Index', [
+            'tenants' => $tenants,
+            'filters' => $request->only(['search', 'status', 'plan_id']),
+        ]);
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'owner_name' => 'required|string|max:255',
+            'owner_email' => 'required|email|unique:tenants,owner_email',
+            'owner_password' => 'required|string|min:8',
+            'plan_id' => 'required|exists:plans,id',
+        ]);
+
+        $tenant = $this->tenantService->createTenant($validated);
+
+        return redirect()->route('tenants.index')
+            ->with('message', 'Tenant created successfully');
+    }
+
+    public function update(Request $request, Tenant $tenant)
+    {
+        $validated = $request->validate([
+            'name' => 'sometimes|string|max:255',
+            'status' => 'sometimes|in:Active,Trial,Canceled',
+            'plan_id' => 'sometimes|exists:plans,id',
+        ]);
+
+        $this->tenantService->updateTenant($tenant, $validated);
+
+        return back()->with('message', 'Tenant updated successfully');
+    }
+
+    public function destroy(Tenant $tenant)
+    {
+        $this->tenantService->deleteTenant($tenant);
+
+        return redirect()->route('tenants.index')
+            ->with('message', 'Tenant deleted successfully');
+    }
+}
+```
+
+## Services
+
+Business logic is encapsulated in service classes:
+
+```php app/Services/System/TenantService.php
+namespace App\Services\System;
+
+use App\Models\System\Tenant;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+
+class TenantService
+{
+    /**
+     * Create a new tenant with database and domain.
+     */
+    public function createTenant(array $data): Tenant
+    {
+        $tenantNameSlug = Str::slug($data['name'], '_');
+        $dbName = 'tenant_' . $tenantNameSlug;
+
+        // 1. Create Tenant (triggers database creation)
+        $tenant = Tenant::create([
+            'id' => Str::uuid(),
+            'name' => $data['name'],
+            'owner_name' => $data['owner_name'],
+            'owner_email' => $data['owner_email'],
+            'owner_password' => Hash::make($data['owner_password']),
+            'plan_id' => $data['plan_id'] ?? null,
+            'status' => $data['status'] ?? 'Trial',
+            'is_active' => true,
+            'tenancy_db_name' => $dbName,
+        ]);
+
+        try {
+            // 2. Create Domain
+            $baseDomain = config('app.url_base', 'localhost');
+            $fullDomain = $data['domain'] . '.' . $baseDomain;
+
+            $tenant->createDomain([
+                'domain' => $fullDomain,
+            ]);
+
+            // 3. Create Admin User in Tenant DB
+            $tenant->run(function () use ($data) {
+                \App\Models\Tenant\User::create([
+                    'name' => $data['owner_name'],
+                    'email' => $data['owner_email'],
+                    'password' => $data['owner_password'],
+                ]);
+            });
+
+            return $tenant;
+
+        } catch (\Exception $e) {
+            // Rollback if setup fails
+            $tenant->delete();
+            throw $e;
+        }
+    }
+
+    /**
+     * List tenants with pagination and filters.
+     */
+    public function listTenants(array $filters = [])
+    {
+        $query = Tenant::query()->with(['plan', 'domains']);
+
+        // Search filter
+        if (!empty($filters['search'])) {
+            $query->where(function ($q) use ($filters) {
+                $q->where('name', 'like', '%' . $filters['search'] . '%')
+                  ->orWhere('owner_name', 'like', '%' . $filters['search'] . '%')
+                  ->orWhere('owner_email', 'like', '%' . $filters['search'] . '%');
+            });
+        }
+
+        // Status filter
+        if (!empty($filters['status'])) {
+            $query->where('status', $filters['status']);
+        }
+
+        // Plan filter
+        if (!empty($filters['plan_id'])) {
+            $query->where('plan_id', $filters['plan_id']);
+        }
+
+        return $query->orderBy('created_at', 'desc')->paginate(10);
+    }
+
+    /**
+     * Cancel a tenant subscription.
+     */
+    public function cancelTenant(Tenant $tenant): Tenant
+    {
+        $tenant->update([
+            'status' => 'Canceled',
+            'is_active' => false,
+            'canceled_at' => now(),
+        ]);
+
+        return $tenant;
+    }
+
+    /**
+     * Restore a canceled tenant within grace period.
+     */
+    public function restoreTenant(Tenant $tenant): Tenant
+    {
+        if ($tenant->status !== 'Canceled') {
+            return $tenant;
+        }
+
+        // Check grace period (30 days)
+        if ($tenant->canceled_at && $tenant->canceled_at->lt(now()->subDays(30))) {
+            throw new \RuntimeException('Grace period expired');
+        }
+
+        $tenant->update([
+            'status' => 'Active',
+            'is_active' => true,
+            'canceled_at' => null,
+        ]);
+
+        return $tenant;
+    }
+}
+```
+
+### Service Benefits
+
+<AccordionGroup>
+  <Accordion title="Encapsulation">
+    Business logic is centralized, making controllers thin and focused on HTTP concerns.
+  </Accordion>
+
+  <Accordion title="Reusability">
+    Services can be used from controllers, commands, jobs, and tests.
+  </Accordion>
+
+  <Accordion title="Testability">
+    Services are easy to test in isolation with dependency injection.
+  </Accordion>
+
+  <Accordion title="Transaction Management">
+    Complex operations with multiple database calls are wrapped in transactions.
+  </Accordion>
+</AccordionGroup>
+
+## Routing
+
+Routes are organized by domain:
+
+### System Routes
+
+```php routes/web.php
+Route::domain(config('app.url_base'))->group(function () {
+    // Root redirect
+    Route::get('/', fn() => redirect()->route('login'));
+
+    // Dashboard
+    Route::get('dashboard', [DashboardController::class, 'index'])
+        ->middleware(['auth', 'verified'])
+        ->name('dashboard');
+
+    // Tenants Management
+    Route::resource('tenants', TenantController::class)
+        ->middleware(['auth', 'verified'])
+        ->except(['show', 'create', 'edit']);
+
+    Route::post('tenants/{tenant}/cancel', [TenantController::class, 'cancel'])
+        ->middleware(['auth', 'verified'])
+        ->name('tenants.cancel');
+
+    // Plans Management
+    Route::resource('plans', PlanController::class)
+        ->middleware(['auth', 'verified'])
+        ->except(['show', 'create', 'edit']);
+
+    // Authentication Routes
+    Route::prefix('auth')->group(function () {
+        Route::get('/login', [AuthenticatedSessionController::class, 'create'])
+            ->middleware(['guest'])
+            ->name('login');
+
+        Route::post('/login', [AuthenticatedSessionController::class, 'store'])
+            ->middleware(['guest']);
+
+        Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
+            ->name('logout');
+    });
+
+    // Settings Routes
+    require __DIR__.'/settings.php';
+});
+```
+
+### Tenant Routes
+
+```php routes/tenant.php
+Route::middleware(['web', 'tenant'])->group(function () {
+    // Tenant Dashboard
+    Route::get('/dashboard', [TenantDashboardController::class, 'index'])
+        ->middleware(['auth'])
+        ->name('tenant.dashboard');
+
+    // Tenant-specific features
+    // Add your tenant routes here
+});
+```
+
+## Middleware
+
+Key middleware in the application:
+
+<CardGroup cols={2}>
+  <Card title="InitializeTenancyByDomain">
+    Identifies tenant by subdomain and switches database connection
+  </Card>
+  
+  <Card title="HandleInertiaRequests">
+    Shares data across all Inertia pages (auth user, flash messages)
+  </Card>
+  
+  <Card title="auth">
+    Ensures user is authenticated before accessing protected routes
+  </Card>
+  
+  <Card title="verified">
+    Ensures user has verified their email address
+  </Card>
+</CardGroup>
+
+## Database Migrations
+
+### Central Database Migrations
+
+```php database/migrations/create_plans_table.php
+Schema::create('plans', function (Blueprint $table) {
+    $table->id();
+    $table->string('name');
+    $table->text('description')->nullable();
+    $table->decimal('price', 10, 2);
+    $table->enum('billing_period', ['monthly', 'yearly']);
+    $table->integer('trial_days')->default(0);
+    $table->timestamps();
+});
+```
+
+### Tenant Database Migrations
+
+```php database/migrations/tenant/create_users_table.php
+Schema::create('users', function (Blueprint $table) {
+    $table->id();
+    $table->string('name');
+    $table->string('email')->unique();
+    $table->timestamp('email_verified_at')->nullable();
+    $table->string('password');
+    $table->rememberToken();
+    $table->timestamps();
+});
+```
+
+<Note>
+  Migrations in `database/migrations/tenant/` run automatically when a new tenant is created.
+</Note>
+
+## Authentication
+
+The application uses **Laravel Fortify** for authentication:
+
+<Tabs>
+  <Tab title="Features">
+    - Login / Logout
+    - Registration
+    - Password Reset
+    - Email Verification
+    - Two-Factor Authentication
+    - Password Confirmation
+  </Tab>
+
+  <Tab title="Configuration">
+    ```php config/fortify.php
+    'features' => [
+        Features::registration(),
+        Features::resetPasswords(),
+        Features::emailVerification(),
+        Features::updateProfileInformation(),
+        Features::updatePasswords(),
+        Features::twoFactorAuthentication(),
+    ],
+    ```
+  </Tab>
+
+  <Tab title="Customization">
+    ```php app/Actions/Fortify/CreateNewUser.php
+    public function create(array $input): User
+    {
+        Validator::make($input, [
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'unique:users'],
+            'password' => ['required', 'min:8', 'confirmed'],
+        ])->validate();
+
+        return User::create([
+            'name' => $input['name'],
+            'email' => $input['email'],
+            'password' => Hash::make($input['password']),
+        ]);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## API Development
+
+API routes are defined in `routes/api.php`:
+
+```php routes/api.php
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::get('/user', function (Request $request) {
+        return $request->user();
+    });
+
+    // Add API endpoints here
+});
+```
+
+**Laravel Sanctum** provides API token authentication for SPAs and mobile apps.
+
+## Commands
+
+Custom Artisan commands for administrative tasks:
+
+```bash
+# Create a new tenant
+php artisan tenant:create
+
+# List all tenants
+php artisan tenants:list
+
+# Run migrations for all tenants
+php artisan tenants:migrate
+
+# Seed tenant databases
+php artisan tenants:seed
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Controller Design">
+    - Keep controllers thin, delegate to services
+    - Use resource controllers for CRUD operations
+    - Validate requests with Form Request classes
+    - Return Inertia responses for frontend views
+  </Accordion>
+
+  <Accordion title="Service Layer">
+    - Encapsulate complex business logic
+    - Use dependency injection
+    - Return models or collections, not views
+    - Wrap multi-step operations in transactions
+  </Accordion>
+
+  <Accordion title="Multi-Tenancy">
+    - Never query tenant data from system context
+    - Always use `tenant()` helper to get current tenant
+    - Test tenant isolation thoroughly
+    - Use `$tenant->run()` to execute code in tenant context
+  </Accordion>
+
+  <Accordion title="Database">
+    - Use eager loading to prevent N+1 queries
+    - Index foreign keys and frequently queried columns
+    - Use database transactions for data consistency
+    - Leverage Eloquent relationships
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Testing" icon="flask" href="/development/testing">
+    Learn how to test Laravel controllers and services
+  </Card>
+  
+  <Card title="Frontend Development" icon="vuejs" href="/development/frontend">
+    Integrate backend with Vue components
+  </Card>
+</CardGroup>

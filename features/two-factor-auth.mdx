@@ -1,0 +1,547 @@
+---
+title: 'Two-Factor Authentication'
+description: 'Setup and use two-factor authentication (2FA) for enhanced security with TOTP-based verification'
+---
+
+## Overview
+
+SaaS Starter Vue includes built-in two-factor authentication (2FA) using Laravel Fortify's implementation. This provides an additional layer of security by requiring users to verify their identity with a time-based one-time password (TOTP) in addition to their password.
+
+<Note>
+  2FA uses authenticator apps like Google Authenticator, Authy, or 1Password to generate verification codes.
+</Note>
+
+## How It Works
+
+2FA requires users to:
+
+1. Enter their email and password (first factor)
+2. Enter a 6-digit code from their authenticator app (second factor)
+3. Optionally use recovery codes if they lose access to their authenticator
+
+### TOTP (Time-Based One-Time Password)
+
+The system uses the TOTP algorithm (RFC 6238) which generates codes that expire every 30 seconds. This is the same standard used by Google Authenticator and other popular authenticator apps.
+
+## Configuration
+
+### Enable 2FA Feature
+
+2FA is enabled in the Fortify configuration:
+
+```php
+// config/fortify.php:146
+'features' => [
+    Features::twoFactorAuthentication([
+        'confirm' => true,
+        'confirmPassword' => true,
+    ]),
+],
+```
+
+**Options:**
+
+<ParamField path="confirm" type="boolean" default="true">
+  Require users to confirm 2FA setup with a valid code before activation
+</ParamField>
+
+<ParamField path="confirmPassword" type="boolean" default="true">
+  Require password confirmation before enabling/disabling 2FA
+</ParamField>
+
+### Database Schema
+
+The users table includes 2FA columns:
+
+```php
+// database/migrations/2025_08_14_170933_add_two_factor_columns_to_users_table.php:14
+Schema::table('users', function (Blueprint $table) {
+    $table->text('two_factor_secret')->after('password')->nullable();
+    $table->text('two_factor_recovery_codes')->after('two_factor_secret')->nullable();
+    $table->timestamp('two_factor_confirmed_at')->after('two_factor_recovery_codes')->nullable();
+});
+```
+
+<ParamField path="two_factor_secret" type="text">
+  Encrypted TOTP secret key used to generate verification codes
+</ParamField>
+
+<ParamField path="two_factor_recovery_codes" type="text">
+  Encrypted JSON array of one-time recovery codes
+</ParamField>
+
+<ParamField path="two_factor_confirmed_at" type="timestamp">
+  Timestamp when 2FA was successfully confirmed and activated
+</ParamField>
+
+## User Model Setup
+
+The User model includes the `TwoFactorAuthenticatable` trait:
+
+```php
+// app/Models/System/User.php:12
+class User extends Authenticatable
+{
+    use HasApiTokens, HasFactory, Notifiable, TwoFactorAuthenticatable;
+
+    protected $hidden = [
+        'password',
+        'two_factor_secret',
+        'two_factor_recovery_codes',
+        'remember_token',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+            'two_factor_confirmed_at' => 'datetime',
+        ];
+    }
+}
+```
+
+<Warning>
+  Never expose `two_factor_secret` or `two_factor_recovery_codes` in API responses. They are automatically hidden.
+</Warning>
+
+## Enabling 2FA
+
+### Step-by-Step Setup
+
+<Steps>
+  <Step title="Navigate to Security Settings">
+    Users access their security settings page (typically `/settings/security`)
+  </Step>
+  
+  <Step title="Confirm Password">
+    User enters their current password to authorize 2FA changes
+  </Step>
+  
+  <Step title="Enable Two-Factor">
+    User clicks "Enable Two-Factor Authentication"
+    
+    ```php
+    POST /auth/user/two-factor-authentication
+    ```
+  </Step>
+  
+  <Step title="Scan QR Code">
+    System generates and displays a QR code. User scans it with their authenticator app
+    
+    ```php
+    GET /auth/user/two-factor-qr-code
+    ```
+  </Step>
+  
+  <Step title="Verify Setup">
+    User enters a code from their authenticator app to confirm setup
+  </Step>
+  
+  <Step title="Save Recovery Codes">
+    System generates 8 recovery codes. User must save them securely
+    
+    ```php
+    GET /auth/user/two-factor-recovery-codes
+    ```
+  </Step>
+</Steps>
+
+### API Endpoints
+
+#### Enable 2FA
+
+```php
+// routes/web.php:215
+Route::post('/user/two-factor-authentication', [TwoFactorAuthenticationController::class, 'store'])
+    ->middleware($twoFactorMiddleware)
+    ->name('two-factor.enable');
+```
+
+This endpoint:
+- Generates a new TOTP secret
+- Creates recovery codes
+- Stores encrypted secret in database
+
+#### Get QR Code
+
+```php
+// routes/web.php:227
+Route::get('/user/two-factor-qr-code', [TwoFactorQrCodeController::class, 'show'])
+    ->middleware($twoFactorMiddleware)
+    ->name('two-factor.qr-code');
+```
+
+Returns an SVG QR code that users scan with their authenticator app.
+
+#### Get Secret Key
+
+```php
+// routes/web.php:231
+Route::get('/user/two-factor-secret-key', [TwoFactorSecretKeyController::class, 'show'])
+    ->middleware($twoFactorMiddleware)
+    ->name('two-factor.secret-key');
+```
+
+Provides the secret key as text for manual entry if QR scanning isn't available.
+
+#### Get Recovery Codes
+
+```php
+// routes/web.php:235
+Route::get('/user/two-factor-recovery-codes', [RecoveryCodeController::class, 'index'])
+    ->middleware($twoFactorMiddleware)
+    ->name('two-factor.recovery-codes');
+```
+
+Displays the recovery codes for users to save.
+
+#### Regenerate Recovery Codes
+
+```php
+// routes/web.php:219
+Route::post('/user/two-factor-recovery-codes', [RecoveryCodeController::class, 'store'])
+    ->middleware($twoFactorMiddleware)
+    ->name('two-factor.recovery-codes.store');
+```
+
+Generates new recovery codes (invalidates old ones).
+
+## Disabling 2FA
+
+Users can disable 2FA:
+
+```php
+// routes/web.php:223
+Route::delete('/user/two-factor-authentication', [TwoFactorAuthenticationController::class, 'destroy'])
+    ->middleware($twoFactorMiddleware)
+    ->name('two-factor.disable');
+```
+
+<Steps>
+  <Step title="Navigate to Security Settings">
+    Access the security settings page
+  </Step>
+  
+  <Step title="Confirm Password">
+    Enter current password to authorize the change
+  </Step>
+  
+  <Step title="Disable 2FA">
+    Click "Disable Two-Factor Authentication"
+  </Step>
+  
+  <Step title="Confirmation">
+    2FA is immediately disabled and secret/codes are removed from database
+  </Step>
+</Steps>
+
+<Warning>
+  Disabling 2FA reduces account security. Warn users before allowing them to disable it, especially for admin accounts.
+</Warning>
+
+## Login with 2FA
+
+### Two-Factor Challenge Flow
+
+When 2FA is enabled, the login process changes:
+
+<Steps>
+  <Step title="Enter Credentials">
+    User enters email and password at `/auth/login`
+  </Step>
+  
+  <Step title="Redirect to 2FA Challenge">
+    Instead of logging in, user is redirected to `/auth/two-factor-challenge`
+    
+    ```php
+    // routes/web.php:203
+    Route::get('/two-factor-challenge', [TwoFactorAuthenticatedSessionController::class, 'create'])
+        ->middleware(['guest:'.config('fortify.guard')])
+        ->name('two-factor.login');
+    ```
+  </Step>
+  
+  <Step title="Enter Verification Code">
+    User enters the 6-digit code from their authenticator app (or a recovery code)
+  </Step>
+  
+  <Step title="Submit Challenge">
+    ```php
+    POST /auth/two-factor-challenge
+    ```
+    
+    With either:
+    ```json
+    {"code": "123456"}
+    ```
+    or
+    ```json
+    {"recovery_code": "recovery-code-here"}
+    ```
+  </Step>
+  
+  <Step title="Login Successful">
+    User is authenticated and redirected to dashboard
+  </Step>
+</Steps>
+
+### Challenge Endpoint
+
+```php
+// routes/web.php:208
+Route::post('/two-factor-challenge', [TwoFactorAuthenticatedSessionController::class, 'store'])
+    ->middleware(['guest:'.config('fortify.guard')]);
+```
+
+**Request Body (Code):**
+```json
+{
+  "code": "123456"
+}
+```
+
+**Request Body (Recovery Code):**
+```json
+{
+  "recovery_code": "ABCD-EFGH-IJKL-MNOP"
+}
+```
+
+### Rate Limiting
+
+2FA challenges are rate-limited separately:
+
+```php
+// config/fortify.php:117
+'limiters' => [
+    'login' => 'login',
+    'two-factor' => 'two-factor',
+],
+```
+
+This prevents brute force attacks on verification codes.
+
+## Recovery Codes
+
+### What Are Recovery Codes?
+
+Recovery codes are one-time use backup codes that allow users to access their account if they:
+- Lose their authenticator device
+- Can't access their authenticator app
+- Need emergency access
+
+### Recovery Code Format
+
+By default, Laravel Fortify generates 8 recovery codes that look like:
+
+```
+ABCD-EFGH-IJKL-MNOP
+QRST-UVWX-YZAB-CDEF
+...
+```
+
+### Using Recovery Codes
+
+Users can enter a recovery code instead of a TOTP code during login:
+
+1. Click "Use recovery code" on the 2FA challenge page
+2. Enter one of their saved recovery codes
+3. Code is validated and invalidated (can only be used once)
+4. User is logged in
+
+<Note>
+  Once a recovery code is used, it's permanently invalidated. Users should regenerate recovery codes after using them.
+</Note>
+
+### Regenerating Recovery Codes
+
+Users should regenerate codes if:
+- They've used some recovery codes
+- They suspect codes were compromised
+- They want to invalidate old codes
+
+```php
+POST /auth/user/two-factor-recovery-codes
+```
+
+## Security Considerations
+
+### Password Confirmation
+
+Sensitive 2FA operations require password confirmation:
+
+```php
+// routes/web.php:211
+$twoFactorMiddleware = Features::optionEnabled(Features::twoFactorAuthentication(), 'confirmPassword')
+    ? [config('fortify.auth_middleware', 'auth').':'.config('fortify.guard'), 'password.confirm']
+    : [config('fortify.auth_middleware', 'auth').':'.config('fortify.guard')];
+```
+
+This prevents attackers from enabling/disabling 2FA if they gain temporary access to an authenticated session.
+
+### Best Practices
+
+<Warning>
+  **Critical Security Recommendations:**
+  
+  1. Always require password confirmation for 2FA changes
+  2. Force 2FA for admin/privileged accounts
+  3. Educate users to save recovery codes securely
+  4. Monitor failed 2FA attempts for suspicious activity
+  5. Consider backup authentication methods
+</Warning>
+
+## Enforcing 2FA
+
+You can require 2FA for specific users or roles:
+
+```php
+// Middleware to enforce 2FA
+class RequireTwoFactorAuth
+{
+    public function handle($request, Closure $next)
+    {
+        $user = $request->user();
+        
+        if (!$user->two_factor_secret) {
+            return redirect()->route('settings.security')
+                ->with('error', 'You must enable two-factor authentication to access this resource.');
+        }
+        
+        return $next($request);
+    }
+}
+```
+
+Apply to sensitive routes:
+
+```php
+Route::middleware(['auth', 'require.2fa'])->group(function () {
+    Route::get('/admin', [AdminController::class, 'index']);
+});
+```
+
+## Checking 2FA Status
+
+In your blade/Vue templates:
+
+```php
+@if(auth()->user()->two_factor_secret)
+    <span class="badge badge-success">2FA Enabled</span>
+@else
+    <span class="badge badge-warning">2FA Disabled</span>
+@endif
+```
+
+In controllers:
+
+```php
+if ($user->two_factor_secret) {
+    // 2FA is enabled
+}
+
+if ($user->two_factor_confirmed_at) {
+    // 2FA is confirmed and active
+}
+```
+
+## Testing 2FA
+
+Test 2FA in your application:
+
+```php
+use Laravel\Fortify\Actions\GenerateNewRecoveryCodes;
+use PragmaRX\Google2FA\Google2FA;
+
+// Generate a valid code for testing
+$user = User::factory()->create();
+$user->forceFill([
+    'two_factor_secret' => encrypt($secret = app(Google2FA::class)->generateSecretKey()),
+])->save();
+
+$code = app(Google2FA::class)->getCurrentOtp(
+    decrypt($user->two_factor_secret)
+);
+
+// Test login with 2FA
+$this->post('/auth/login', [
+    'email' => $user->email,
+    'password' => 'password',
+]);
+
+$this->post('/auth/two-factor-challenge', [
+    'code' => $code,
+])->assertRedirect('/dashboard');
+```
+
+## Troubleshooting
+
+<Accordion title="Codes not working">
+  **Common causes:**
+  
+  1. **Time sync issues** - Ensure device clock is accurate (TOTP is time-based)
+  2. **Wrong secret** - User may have scanned QR code for different account
+  3. **App issues** - Try different authenticator app
+  
+  **Solution:** Disable and re-enable 2FA with fresh QR code
+</Accordion>
+
+<Accordion title="Lost authenticator device">
+  **Options:**
+  
+  1. Use a recovery code to log in
+  2. Contact support to disable 2FA (requires identity verification)
+  3. Use backup authenticator if codes were synced (like Authy)
+  
+  **Prevention:** Always save recovery codes when setting up 2FA
+</Accordion>
+
+<Accordion title="QR code not displaying">
+  **Check:**
+  
+  1. User is authenticated
+  2. 2FA is enabled for the user (`two_factor_secret` exists)
+  3. Route middleware is correct
+  4. SVG rendering is supported in browser
+</Accordion>
+
+## Customization
+
+You can customize the 2FA experience:
+
+### Custom 2FA Views
+
+Create custom Inertia/Vue pages:
+
+```php
+return Inertia::render('Auth/TwoFactorChallenge', [
+    'message' => 'Enter the code from your authenticator app',
+]);
+```
+
+### Custom Recovery Code Count
+
+Modify the recovery code generation in a service provider:
+
+```php
+use Laravel\Fortify\Actions\GenerateNewRecoveryCodes;
+
+app()->bind(GenerateNewRecoveryCodes::class, function () {
+    return new GenerateNewRecoveryCodes(16); // Generate 16 codes instead of 8
+});
+```
+
+### Backup Methods
+
+Consider implementing backup authentication methods:
+- SMS verification (requires additional package)
+- Email verification codes
+- Hardware security keys (WebAuthn)
+
+## Related Documentation
+
+- [Authentication System](/features/authentication) - General authentication overview
+- [User Management](/features/user-management) - Managing users and permissions
+- [Security Best Practices](/security/best-practices) - Overall security guidelines

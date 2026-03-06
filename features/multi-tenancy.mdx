@@ -1,0 +1,351 @@
+---
+title: 'Multi-Tenancy Architecture'
+description: 'Learn how multi-tenancy works in SaaS Starter Vue with domain-based routing and database isolation'
+---
+
+## Overview
+
+SaaS Starter Vue implements a **database-per-tenant** architecture using [Stancl/Tenancy](https://tenancyforlaravel.com/). Each tenant gets:
+
+- A dedicated database for complete data isolation
+- A unique subdomain (e.g., `acme.yourdomain.com`)
+- Automatic database creation and migration
+- Independent user authentication
+
+<Note>
+  The multi-tenancy system uses domain-based identification. Tenants are automatically identified by their subdomain when accessing the application.
+</Note>
+
+## How It Works
+
+### Central vs Tenant Domains
+
+The application operates on two domain types:
+
+**Central Domain** (`app.yourdomain.com`)
+- Admin dashboard and management
+- Tenant creation and billing
+- System-wide settings
+- Plan management
+
+**Tenant Domains** (`{subdomain}.yourdomain.com`)
+- Individual tenant workspaces
+- Tenant-specific users and data
+- Isolated authentication
+
+### Database Architecture
+
+Each tenant gets a separate MySQL database:
+
+```php
+// Database naming convention
+tenant_{tenant_slug}
+
+// Example:
+tenant_acme_corp
+tenant_demo_company
+```
+
+The system automatically:
+1. Creates the database when a tenant is provisioned
+2. Runs migrations to set up the schema
+3. Seeds initial data (admin user)
+4. Configures domain routing
+
+## Creating Tenants
+
+### From Admin Dashboard
+
+Tenants can be created by system administrators:
+
+<Steps>
+  <Step title="Navigate to Tenants">
+    Access the Tenants management page from your admin dashboard at `/tenants`
+  </Step>
+  
+  <Step title="Fill Tenant Information">
+    Provide the following details:
+    - Company name
+    - Subdomain (unique identifier)
+    - Owner name and email
+    - Owner password
+    - Subscription plan
+  </Step>
+  
+  <Step title="Automatic Provisioning">
+    The system automatically:
+    - Creates a dedicated database
+    - Sets up the domain routing
+    - Creates the admin user
+    - Initializes the tenant workspace
+  </Step>
+</Steps>
+
+### Self-Service Registration
+
+If guest registration is enabled, users can sign up directly:
+
+```php
+// routes/web.php:45
+Route::get('guest-register', [GuestRegisterController::class, 'index'])
+    ->middleware(['guest'])
+    ->name('guest-register.index');
+```
+
+<Accordion title="View Guest Registration Code">
+```php
+// app/Http/Controllers/System/GuestRegisterController.php:48
+public function store(Request $request)
+{
+    $validated = $request->validate([
+        'company_name' => ['required', 'string', 'max:255', 'unique:tenants,name'],
+        'owner_name' => ['required', 'string', 'max:255'],
+        'owner_email' => ['required', 'string', 'email', 'max:255'],
+        'domain' => ['required', 'string', 'max:63', 'alpha_dash', 'unique:domains,domain'],
+        'password' => ['required', 'confirmed', Password::defaults()],
+    ]);
+
+    $data = [
+        'name' => $validated['company_name'],
+        'owner_name' => $validated['owner_name'],
+        'owner_email' => $validated['owner_email'],
+        'owner_password' => $validated['password'],
+        'domain' => $validated['domain'],
+        'plan_id' => $freePlan->id,
+        'status' => 'Active',
+    ];
+
+    $tenant = $this->tenantService->createTenant($data);
+    
+    // Redirect to tenant login
+    $tenantDomain = $tenant->domains->first()->domain;
+    return Inertia::location($protocol . $tenantDomain . '/login');
+}
+```
+</Accordion>
+
+## Tenant Isolation
+
+### Middleware Protection
+
+Tenant routes are protected by specialized middleware:
+
+```php
+// routes/tenant.php:21
+Route::middleware([
+    'web',
+    InitializeTenancyByDomain::class,      // Identifies tenant by domain
+    PreventAccessFromCentralDomains::class, // Blocks central domain access
+])->group(function () {
+    // Tenant routes here
+});
+```
+
+### Database Context Switching
+
+The `InitializeTenancyByDomain` middleware automatically:
+
+1. Identifies the tenant from the subdomain
+2. Switches the database connection to the tenant's database
+3. Makes tenant data available throughout the request
+
+<Warning>
+  Never manually switch database connections. Always rely on the tenancy middleware to handle context switching automatically.
+</Warning>
+
+## Tenant Lifecycle
+
+### Active Status
+
+```php
+// app/Models/System/Tenant.php:16
+protected $casts = [
+    'subscription_ends_at' => 'datetime',
+    'trial_ends_at' => 'datetime',
+    'canceled_at' => 'datetime',
+];
+```
+
+Tenants can have the following statuses:
+- `Trial` - In trial period
+- `Active` - Active subscription
+- `Canceled` - Canceled with grace period
+- `Expired` - Trial or subscription expired
+
+### Cancellation and Grace Period
+
+When a tenant is canceled, they enter a 30-day grace period:
+
+```php
+// app/Services/System/TenantService.php:79
+public function cancelTenant(Tenant $tenant): Tenant
+{
+    $tenant->update([
+        'status' => 'Canceled',
+        'is_active' => false,
+        'canceled_at' => now(),
+    ]);
+
+    return $tenant;
+}
+```
+
+<Steps>
+  <Step title="Cancellation">
+    Tenant is marked as canceled and `canceled_at` timestamp is set
+  </Step>
+  
+  <Step title="Grace Period">
+    Tenant has 30 days to restore their account
+  </Step>
+  
+  <Step title="Permanent Deletion">
+    After 30 days, the tenant database is permanently deleted
+  </Step>
+</Steps>
+
+### Restoration
+
+Canceled tenants can be restored within the grace period:
+
+```php
+// routes/web.php:93
+Route::post('tenants/{tenant}/restore', [TenantController::class, 'restore'])
+    ->middleware(['auth', 'verified'])
+    ->name('tenants.restore');
+```
+
+## Tenant Model
+
+The Tenant model extends Stancl's base tenant:
+
+```php
+// app/Models/System/Tenant.php:12
+class Tenant extends BaseTenant implements TenantWithDatabase
+{
+    use HasDatabase, HasDomains;
+
+    // Custom columns
+    public static function getCustomColumns(): array
+    {
+        return [
+            'id',
+            'name',
+            'tenancy_db_name',
+            'plan_id',
+            'owner_name',
+            'owner_email',
+            'owner_password',
+            'status',
+            'subscription_ends_at',
+            'trial_ends_at',
+            'canceled_at',
+            'is_active',
+        ];
+    }
+}
+```
+
+### Relationships
+
+<ParamField path="plan()" type="belongsTo">
+  The subscription plan assigned to this tenant
+</ParamField>
+
+<ParamField path="subscriptions()" type="hasMany">
+  All subscription records for this tenant
+</ParamField>
+
+<ParamField path="currentSubscription()" type="hasOne">
+  The most recent subscription record
+</ParamField>
+
+<ParamField path="domains()" type="hasMany">
+  Domain records associated with this tenant (inherited from `HasDomains`)
+</ParamField>
+
+## Working with Tenant Context
+
+### Running Code in Tenant Context
+
+When you need to execute code within a tenant's database context:
+
+```php
+// app/Services/System/TenantService.php:52
+$tenant->run(function () use ($data) {
+    \App\Models\Tenant\User::create([
+        'name' => $data['owner_name'],
+        'email' => $data['owner_email'],
+        'password' => $data['owner_password'],
+    ]);
+});
+```
+
+The `run()` method ensures all queries execute against the tenant's database.
+
+## Domain Configuration
+
+### Subdomain Format
+
+Tenant domains are created with this pattern:
+
+```php
+// app/Services/System/TenantService.php:42
+$baseDomain = config('app.url_base', 'localhost');
+$fullDomain = $data['domain'] . '.' . $baseDomain;
+
+// Example:
+// Subdomain: "acme"
+// Base: "saas-app.com"
+// Result: "acme.saas-app.com"
+```
+
+### Environment Configuration
+
+Configure your base domain in `.env`:
+
+```bash
+APP_URL_BASE=yourdomain.com
+```
+
+<Note>
+  Make sure your DNS wildcard record points `*.yourdomain.com` to your application server for subdomain routing to work correctly.
+</Note>
+
+## Best Practices
+
+<Warning>
+  **Never** access tenant data from the central domain without explicitly switching context using `$tenant->run()`.
+</Warning>
+
+1. **Always use middleware** - Let the framework handle tenant identification
+2. **Test isolation** - Ensure tenant data never leaks between databases
+3. **Monitor database growth** - Each tenant database grows independently
+4. **Backup strategy** - Implement per-tenant backup solutions
+5. **Migration testing** - Test tenant migrations thoroughly before deployment
+
+## API Endpoints
+
+### Tenant Management
+
+```php
+// List tenants
+GET /tenants
+
+// Create tenant
+POST /tenants
+
+// Update tenant
+PUT /tenants/{tenant}
+
+// Cancel tenant
+POST /tenants/{tenant}/cancel
+
+// Restore tenant
+POST /tenants/{tenant}/restore
+
+// Delete tenant (permanent)
+DELETE /tenants/{tenant}
+```
+
+All endpoints require authentication and email verification (`auth`, `verified` middleware).

@@ -1,80 +1,431 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Get a working multi-tenant SaaS application running in minutes
 ---
 
-## Get started in three steps
+# Quick Start Guide
 
-Get your documentation site running locally and make your first customization.
-
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+This guide will walk you through starting the development server, logging in, and creating your first tenant.
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  Before starting, make sure you've completed the [installation steps](/installation).
+</Note>
+
+## Start the Development Server
+
+SaaS Starter Vue includes a convenient development command that starts all necessary services:
+
+```bash
+composer run dev
+```
+
+This command uses `concurrently` to run three services simultaneously:
+
+<CardGroup cols={3}>
+  <Card title="Laravel Server" icon="server">
+    PHP development server on port 8000
+  </Card>
+  <Card title="Queue Worker" icon="list-check">
+    Processes background jobs and emails
+  </Card>
+  <Card title="Vite Dev Server" icon="bolt">
+    Hot module replacement for frontend
+  </Card>
+</CardGroup>
+
+You should see output similar to:
+
+```bash
+[server] Starting Laravel development server: http://127.0.0.1:8000
+[queue]  Processing jobs from database queue...
+[vite]   VITE v7.0.4 ready in 1234 ms
+[vite]   ➜ Local: http://localhost:5173/
+```
+
+<Note>
+  By default, the application will be available at `http://saas-starter-vue.test` or `http://localhost:8000` depending on your `.env` configuration.
+</Note>
+
+## Create Your First Admin User
+
+Since this is a fresh installation, you'll need to create an admin user to access the system dashboard.
+
+<Steps>
+  <Step title="Access Registration Page">
+    Navigate to the registration page:
+    
+    ```
+    http://saas-starter-vue.test/auth/register
+    ```
+    
+    Or click "Register" from the login page.
+  </Step>
+
+  <Step title="Fill Registration Form">
+    Enter your admin user details:
+    
+    - **Name**: Your full name
+    - **Email**: Your email address
+    - **Password**: A secure password (minimum 8 characters)
+    - **Confirm Password**: Re-enter your password
+    
+    Click **Register** to create your account.
+  </Step>
+
+  <Step title="Verify Email (Optional)">
+    If email verification is enabled, check your email inbox for a verification link.
+    
+    <Note>
+      In development, emails are logged. Check `storage/logs/laravel.log` or configure a mail testing service like Mailtrap.
+    </Note>
+  </Step>
+</Steps>
+
+## Access the Dashboard
+
+After registration and login, you'll be redirected to the system dashboard:
+
+```
+http://saas-starter-vue.test/dashboard
+```
+
+The dashboard provides an overview of:
+- Total tenants
+- Active subscriptions
+- Trial accounts
+- Canceled tenants
+
+<Note>
+  The dashboard will initially show zero tenants since this is a fresh installation.
+</Note>
+
+## Create Your First Tenant
+
+Now let's create your first tenant (customer account) in the multi-tenant system.
+
+<Steps>
+  <Step title="Navigate to Tenants Page">
+    From the dashboard, click **Tenants** in the navigation menu, or navigate to:
+    
+    ```
+    http://saas-starter-vue.test/tenants
+    ```
+  </Step>
+
+  <Step title="Click Create Tenant">
+    Click the **"Create Tenant"** or **"+"** button to open the tenant creation form.
+  </Step>
+
+  <Step title="Fill Tenant Information">
+    Enter the tenant details:
+    
+    ```typescript
+    {
+      "name": "Acme Corporation",
+      "domain": "acme",          // Subdomain for tenant
+      "email": "admin@acme.com",  // Tenant admin email
+      "plan_id": 1,               // Select a subscription plan
+      "status": "Active"          // Tenant status
+    }
+    ```
+    
+    <Warning>
+      The domain must be unique and will be used as a subdomain:
+      `acme.saas-starter-vue.test`
+    </Warning>
+  </Step>
+
+  <Step title="Submit Form">
+    Click **Create** or **Save**. The system will:
+    
+    - Create the tenant record in the central database
+    - Provision a new isolated database schema
+    - Configure the subdomain routing
+    - Run tenant-specific migrations
+    
+    You'll see a success message:
+    
+    ```
+    ✓ Tenant created successfully! Database and domain configured.
+    ```
+  </Step>
+</Steps>
+
+## View Tenant Dashboard
+
+Once created, your tenant will appear in the tenants list with key information:
+
+<CodeGroup>
+```typescript Tenant Data Structure
+{
+  id: 1,
+  name: "Acme Corporation",
+  domain: "acme",
+  email: "admin@acme.com",
+  status: "Active",
+  plan: {
+    name: "Professional",
+    price: "$49.00"
+  },
+  created_at: "2026-03-06T10:30:00.000000Z"
+}
+```
+
+```json Statistics
+{
+  "total": 1,
+  "active": 1,
+  "trial": 0,
+  "canceled": 0
+}
+```
+</CodeGroup>
+
+## Manage Tenants
+
+From the tenants page (`/tenants`), you can perform various management operations:
+
+### Update Tenant
+
+Click the **Edit** icon to modify tenant details:
+- Change plan subscription
+- Update contact information
+- Modify status
+
+### Cancel Tenant
+
+Click the **Cancel** button to initiate a 30-day grace period:
+
+```typescript
+POST /tenants/{tenant}/cancel
+```
+
+During the grace period:
+- Tenant status changes to "Canceled"
+- Data is retained for 30 days
+- Tenant can be restored
+
+### Restore Tenant
+
+For canceled tenants within the grace period:
+
+```typescript
+POST /tenants/{tenant}/restore
+```
+
+This reactivates the tenant and restores full access.
+
+### Delete Tenant
+
+Permanently delete a tenant and all associated data:
+
+```typescript
+DELETE /tenants/{tenant}
+```
+
+<Warning>
+  This action is irreversible and will:
+  - Delete the tenant's database schema
+  - Remove all domain configurations
+  - Permanently erase all tenant data
+</Warning>
+
+## Create Subscription Plans
+
+Before creating many tenants, you'll want to set up subscription plans:
+
+<Steps>
+  <Step title="Navigate to Plans">
+    Click **Plans** in the navigation menu or go to:
+    
+    ```
+    http://saas-starter-vue.test/plans
+    ```
+  </Step>
+
+  <Step title="Create a Plan">
+    Click **Create Plan** and fill in the details:
+    
+    ```json
+    {
+      "name": "Professional",
+      "description": "Perfect for growing teams",
+      "price": 49.00,
+      "currency": "USD",
+      "billing_period": "monthly",
+      "features": [
+        "Unlimited users",
+        "Advanced analytics",
+        "Priority support"
+      ],
+      "is_active": true
+    }
+    ```
+  </Step>
+
+  <Step title="Assign to Tenants">
+    When creating new tenants, select from your available plans to automatically configure billing and feature access.
+  </Step>
+</Steps>
+
+## Enable Two-Factor Authentication
+
+Secure your admin account with 2FA:
+
+<Steps>
+  <Step title="Go to Settings">
+    Click your profile avatar and select **Settings**, or navigate to:
+    
+    ```
+    http://saas-starter-vue.test/settings/security
+    ```
+  </Step>
+
+  <Step title="Enable 2FA">
+    In the Security section:
+    
+    1. Click **Enable Two-Factor Authentication**
+    2. Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.)
+    3. Enter the 6-digit code to confirm
+    4. Save your recovery codes in a secure location
+  </Step>
+
+  <Step title="Test 2FA">
+    Log out and log back in. You'll now be prompted for a 2FA code after entering your password.
+  </Step>
+</Steps>
+
+## Working with the Queue System
+
+Many operations run in the background via queues:
+
+### Monitor Queue Jobs
+
+The `composer run dev` command automatically starts a queue worker. To monitor queue jobs:
+
+```bash
+# View queue status
+php artisan queue:work --verbose
+
+# View failed jobs
+php artisan queue:failed
+
+# Retry failed jobs
+php artisan queue:retry all
+```
+
+### Common Queued Operations
+
+- Email notifications (password resets, verifications)
+- Tenant database provisioning
+- Subscription billing updates
+- Export operations
+
+<Note>
+  In production, you should use a proper queue driver like Redis or Amazon SQS instead of the database driver.
+</Note>
+
+## Development Workflow
+
+### Hot Module Replacement (HMR)
+
+With Vite running, your frontend updates automatically:
+
+```bash
+# Edit any Vue component
+/resources/js/pages/system/Dashboard.vue
+
+# Changes appear instantly in browser
+```
+
+### Backend Changes
+
+For backend changes, the Laravel development server automatically reloads:
+
+```bash
+# Edit controller
+/app/Http/Controllers/System/TenantController.php
+
+# Refresh browser to see changes
+```
+
+### Database Changes
+
+When modifying database schema:
+
+```bash
+# Create migration
+php artisan make:migration add_feature_to_tenants
+
+# Run migration
+php artisan migrate
+
+# For tenant-specific tables
+php artisan tenants:migrate
+```
+
+## Next Steps
+
+Now that you have a working SaaS application, explore these areas:
+
+<CardGroup cols={2}>
+  <Card title="Customize Tenant Features" icon="wrench">
+    Add custom functionality specific to your SaaS product
+  </Card>
+  <Card title="Configure Email" icon="envelope">
+    Set up SMTP or email service for transactional emails
+  </Card>
+  <Card title="Build Tenant UI" icon="paintbrush">
+    Create the customer-facing application interface
+  </Card>
+  <Card title="Set Up Payments" icon="credit-card">
+    Integrate Stripe or another payment processor
+  </Card>
+</CardGroup>
+
+## Useful Commands Reference
+
+<CodeGroup>
+```bash Development
+# Start all dev services
+composer run dev
+
+# Run frontend only
+pnpm run dev
+
+# Run backend only
+php artisan serve
+
+# Watch queue jobs
+php artisan queue:work --verbose
+```
+
+```bash Database
+# Run migrations
+php artisan migrate
+
+# Fresh install (drops all tables)
+php artisan migrate:fresh
+
+# Run tenant migrations
+php artisan tenants:migrate
+
+# Check database status
+php artisan db:show
+```
+
+```bash Code Quality
+# Lint PHP code
+composer run lint
+
+# Run tests
+composer run test
+
+# Format frontend code
+pnpm run format
+```
+</CodeGroup>
+
+<Note>
+  Keep the development server running while you work. All three services (Laravel, Queue, Vite) need to be active for the full development experience.
 </Note>

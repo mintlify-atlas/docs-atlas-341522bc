@@ -1,0 +1,519 @@
+---
+title: 'Subscription Plans'
+description: 'Learn how to manage subscription plans, features, and tenant subscriptions in SaaS Starter Vue'
+---
+
+## Overview
+
+SaaS Starter Vue includes a flexible subscription plan system that allows you to:
+
+- Create multiple pricing tiers
+- Attach features to plans
+- Manage tenant subscriptions
+- Track billing periods
+- Support free and paid plans
+
+<Note>
+  Plans are managed from the central domain and assigned to tenants during creation or upgrade.
+</Note>
+
+## Plan Structure
+
+### Plan Model
+
+Plans are stored in the `plans` table with the following attributes:
+
+```php
+// app/Models/System/Plan.php:15
+protected $fillable = [
+    'name',
+    'slug',
+    'description',
+    'price',
+    'currency',
+    'duration_in_days',
+    'is_free',
+    'is_active',
+];
+```
+
+### Database Schema
+
+```php
+// database/migrations/2026_02_06_063829_create_plans_table.php:14
+Schema::create('plans', function (Blueprint $table) {
+    $table->id();
+    $table->string('name');
+    $table->string('slug')->unique();
+    $table->text('description')->nullable();
+    $table->decimal('price', 10, 2);
+    $table->string('currency')->default('USD');
+    $table->integer('duration_in_days');
+    $table->boolean('is_free')->default(false);
+    $table->boolean('is_active')->default(true);
+    $table->timestamps();
+    $table->softDeletes();
+});
+```
+
+### Plan Properties
+
+<ParamField path="name" type="string" required>
+  Display name of the plan (e.g., "Pro", "Enterprise")
+</ParamField>
+
+<ParamField path="slug" type="string" required>
+  Unique identifier for the plan (e.g., "pro", "enterprise")
+</ParamField>
+
+<ParamField path="description" type="text">
+  Detailed description of what's included in the plan
+</ParamField>
+
+<ParamField path="price" type="decimal">
+  Plan price with 2 decimal precision (e.g., 29.99)
+</ParamField>
+
+<ParamField path="currency" type="string" default="USD">
+  Currency code (USD, EUR, GBP, etc.)
+</ParamField>
+
+<ParamField path="duration_in_days" type="integer">
+  Billing cycle length in days (30 for monthly, 365 for yearly)
+</ParamField>
+
+<ParamField path="is_free" type="boolean" default="false">
+  Whether this is a free plan
+</ParamField>
+
+<ParamField path="is_active" type="boolean" default="true">
+  Whether the plan is available for new subscriptions
+</ParamField>
+
+## Managing Plans
+
+### List Plans
+
+View all subscription plans:
+
+```php
+// routes/web.php:67
+Route::resource('plans', \App\Http\Controllers\System\PlanController::class)
+    ->middleware(['auth', 'verified'])
+    ->except(['show', 'create', 'edit']);
+```
+
+**Endpoint:** `GET /plans`
+
+### Create a Plan
+
+Create a new subscription plan:
+
+```php
+// app/Http/Controllers/System/PlanController.php:39
+public function store(StorePlanRequest $request): RedirectResponse
+{
+    $this->planService->createPlan($request->validated());
+
+    return redirect()
+        ->route('plans.index')
+        ->with('success', 'Plan created successfully');
+}
+```
+
+**Endpoint:** `POST /plans`
+
+**Example Request:**
+
+```json
+{
+  "name": "Professional",
+  "slug": "pro",
+  "description": "For growing businesses",
+  "price": 49.99,
+  "currency": "USD",
+  "duration_in_days": 30,
+  "is_free": false,
+  "is_active": true
+}
+```
+
+### Update a Plan
+
+Modify an existing plan:
+
+```php
+// app/Http/Controllers/System/PlanController.php:48
+public function update(UpdatePlanRequest $request, Plan $plan): RedirectResponse
+{
+    $this->planService->updatePlan($plan, $request->validated());
+
+    return redirect()
+        ->route('plans.index')
+        ->with('success', 'Plan updated successfully');
+}
+```
+
+**Endpoint:** `PUT /plans/{plan}`
+
+<Warning>
+  Changing plan pricing or features may affect existing subscribers. Consider creating a new plan version instead.
+</Warning>
+
+### Delete a Plan
+
+Soft delete a plan:
+
+```php
+// app/Http/Controllers/System/PlanController.php:58
+public function destroy(Plan $plan): RedirectResponse
+{
+    // Check if plan has active tenants
+    if ($plan->tenants()->count() > 0) {
+        return redirect()
+            ->route('plans.index')
+            ->with('error', 'Cannot delete plan with active tenants');
+    }
+
+    $this->planService->deletePlan($plan);
+
+    return redirect()
+        ->route('plans.index')
+        ->with('success', 'Plan deleted successfully');
+}
+```
+
+**Endpoint:** `DELETE /plans/{plan}`
+
+<Note>
+  Plans with active tenants cannot be deleted. You must migrate tenants to another plan first or use soft deletes.
+</Note>
+
+## Plan Features
+
+### Feature Model
+
+Features can be attached to plans:
+
+```php
+// app/Models/System/Feature.php:13
+protected $fillable = [
+    'name',
+    'code',
+    'description',
+];
+```
+
+### Feature Schema
+
+```php
+// database/migrations/2026_02_06_064706_create_features_table.php:14
+Schema::create('features', function (Blueprint $table) {
+    $table->id();
+    $table->string('name');
+    $table->string('code')->unique();
+    $table->text('description')->nullable();
+    $table->timestamps();
+});
+```
+
+### Attaching Features to Plans
+
+Features are attached via a pivot table with values:
+
+```php
+// app/Models/System/Plan.php:37
+public function features(): BelongsToMany
+{
+    return $this->belongsToMany(Feature::class, 'feature_plan')
+                ->withPivot('value')
+                ->withTimestamps();
+}
+```
+
+The `value` field stores the feature limit or configuration:
+
+**Example Features:**
+
+```php
+// Attach features to a plan
+$plan->features()->attach($feature->id, ['value' => '100']);
+
+// Examples:
+// - max_users: "10"
+// - storage_gb: "50"
+// - api_calls_per_month: "10000"
+// - custom_domain: "true"
+```
+
+### Checking Feature Access
+
+Check if a tenant's plan includes a feature:
+
+```php
+$tenant = Tenant::find($tenantId);
+$plan = $tenant->plan;
+
+if ($plan->features->contains('code', 'custom_domain')) {
+    // Feature is available
+    $value = $plan->features->where('code', 'custom_domain')->first()->pivot->value;
+}
+```
+
+## Subscriptions
+
+### Subscription Model
+
+Tenants can have multiple subscription records:
+
+```php
+// app/Models/System/Subscription.php:13
+protected $fillable = [
+    'tenant_id',
+    'plan_id',
+    'stripe_id',
+    'stripe_status',
+    'stripe_price',
+    'quantity',
+    'trial_ends_at',
+    'ends_at',
+];
+```
+
+### Subscription Schema
+
+```php
+// database/migrations/2026_02_06_064712_create_subscriptions_table.php:14
+Schema::create('subscriptions', function (Blueprint $table) {
+    $table->id();
+    $table->string('tenant_id');
+    $table->foreign('tenant_id')->references('id')->on('tenants')->cascadeOnDelete();
+    $table->foreignId('plan_id')->constrained('plans');
+    $table->string('stripe_id')->nullable()->index();
+    $table->string('stripe_status')->nullable();
+    $table->string('stripe_price')->nullable();
+    $table->integer('quantity')->nullable();
+    $table->timestamp('trial_ends_at')->nullable();
+    $table->timestamp('ends_at')->nullable();
+    $table->timestamps();
+});
+```
+
+### Tenant-Plan Relationship
+
+```php
+// app/Models/System/Tenant.php:40
+public function plan()
+{
+    return $this->belongsTo(Plan::class);
+}
+
+public function subscriptions()
+{
+    return $this->hasMany(Subscription::class);
+}
+
+public function currentSubscription()
+{
+    return $this->hasOne(Subscription::class)->latestOfMany();
+}
+```
+
+## Plan Assignment
+
+### During Tenant Creation
+
+Plans are assigned when creating a tenant:
+
+```php
+// app/Services/System/TenantService.php:25
+$tenant = Tenant::create([
+    'id' => Str::uuid(),
+    'name' => $data['name'],
+    'owner_name' => $data['owner_name'],
+    'owner_email' => $data['owner_email'],
+    'owner_password' => Hash::make($data['owner_password']),
+    'plan_id' => $data['plan_id'] ?? null,
+    'status' => $data['status'] ?? 'Trial',
+    'is_active' => true,
+    'tenancy_db_name' => $dbName,
+]);
+```
+
+### Guest Registration (Free Plan)
+
+Guest registration automatically assigns the free plan:
+
+```php
+// app/Http/Controllers/System/GuestRegisterController.php:36
+$freePlan = Plan::where('price', 0)->first();
+
+$data = [
+    'plan_id' => $freePlan ? $freePlan->id : null,
+    'status' => 'Active',
+    // ...
+];
+```
+
+<Note>
+  Create at least one free plan (price = 0) for guest registration to work properly.
+</Note>
+
+## Trial Periods
+
+Tenants can have trial periods before requiring payment:
+
+```php
+// app/Models/System/Tenant.php:16
+protected $casts = [
+    'subscription_ends_at' => 'datetime',
+    'trial_ends_at' => 'datetime',
+    'canceled_at' => 'datetime',
+];
+```
+
+### Setting Trial Period
+
+```php
+$tenant->update([
+    'status' => 'Trial',
+    'trial_ends_at' => now()->addDays(14),
+]);
+```
+
+### Checking Trial Status
+
+```php
+if ($tenant->status === 'Trial' && $tenant->trial_ends_at->isFuture()) {
+    // Tenant is in active trial
+} elseif ($tenant->status === 'Trial' && $tenant->trial_ends_at->isPast()) {
+    // Trial has expired
+}
+```
+
+## Stripe Integration
+
+The subscription model includes Stripe fields for payment processing:
+
+<ParamField path="stripe_id" type="string">
+  Stripe subscription ID
+</ParamField>
+
+<ParamField path="stripe_status" type="string">
+  Stripe subscription status (active, canceled, past_due, etc.)
+</ParamField>
+
+<ParamField path="stripe_price" type="string">
+  Stripe price ID
+</ParamField>
+
+<Note>
+  Stripe integration requires additional setup. See the [Payments](/payments/stripe-setup) documentation for details.
+</Note>
+
+## Plan Statistics
+
+View plan usage statistics:
+
+```php
+// app/Http/Controllers/System/PlanController.php:31
+'stats' => [
+    'total' => Plan::count(),
+    'active' => Plan::where('is_active', true)->count(),
+    'inactive' => Plan::where('is_active', false)->count(),
+]
+```
+
+## Example Plan Setup
+
+Here's a complete example of creating a tiered pricing structure:
+
+<Steps>
+  <Step title="Create Free Plan">
+    ```php
+    Plan::create([
+        'name' => 'Free',
+        'slug' => 'free',
+        'description' => 'Perfect for trying out',
+        'price' => 0.00,
+        'currency' => 'USD',
+        'duration_in_days' => 30,
+        'is_free' => true,
+        'is_active' => true,
+    ]);
+    ```
+  </Step>
+  
+  <Step title="Create Pro Plan">
+    ```php
+    Plan::create([
+        'name' => 'Professional',
+        'slug' => 'pro',
+        'description' => 'For growing businesses',
+        'price' => 49.99,
+        'currency' => 'USD',
+        'duration_in_days' => 30,
+        'is_free' => false,
+        'is_active' => true,
+    ]);
+    ```
+  </Step>
+  
+  <Step title="Create Enterprise Plan">
+    ```php
+    Plan::create([
+        'name' => 'Enterprise',
+        'slug' => 'enterprise',
+        'description' => 'For large organizations',
+        'price' => 199.99,
+        'currency' => 'USD',
+        'duration_in_days' => 30,
+        'is_free' => false,
+        'is_active' => true,
+    ]);
+    ```
+  </Step>
+</Steps>
+
+## Best Practices
+
+1. **Version Plans** - Create new plan versions instead of modifying existing ones
+2. **Grandfather Existing Customers** - Let existing subscribers keep their plan
+3. **Clear Descriptions** - Make plan differences obvious to customers
+4. **Feature Limits** - Use the feature system to enforce plan limitations
+5. **Trial Periods** - Offer trials to increase conversions
+6. **Annual Discounts** - Use `duration_in_days: 365` for annual plans with discounts
+
+## Common Patterns
+
+### Monthly vs Annual Plans
+
+Create both billing cycles:
+
+```php
+// Monthly
+Plan::create([
+    'name' => 'Pro Monthly',
+    'slug' => 'pro-monthly',
+    'price' => 49.99,
+    'duration_in_days' => 30,
+]);
+
+// Annual (with discount)
+Plan::create([
+    'name' => 'Pro Annual',
+    'slug' => 'pro-annual',
+    'price' => 499.99, // ~17% discount
+    'duration_in_days' => 365,
+]);
+```
+
+### Metered vs Flat Pricing
+
+Use the `quantity` field in subscriptions for metered billing:
+
+```php
+$subscription->update([
+    'quantity' => $userCount, // Bill based on number of users
+]);
+```

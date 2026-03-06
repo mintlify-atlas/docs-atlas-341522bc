@@ -1,0 +1,408 @@
+---
+title: Database Configuration
+description: Set up PostgreSQL, run migrations, and understand the multi-tenant database architecture
+---
+
+SaaS Starter Vue uses PostgreSQL as the primary database with a multi-tenant architecture powered by [Stancl/Tenancy](https://tenancyforlaravel.com/). Each tenant gets their own isolated database.
+
+## Database Architecture
+
+The application uses a **multi-database tenancy** approach:
+
+- **Central Database**: Stores system-wide data (tenants, plans, subscriptions, domains)
+- **Tenant Databases**: Each tenant gets their own PostgreSQL database for isolated data storage
+
+<Note>
+  This architecture provides complete data isolation between tenants and makes backup/restore operations per-tenant easier.
+</Note>
+
+## PostgreSQL Setup
+
+### Local Development
+
+Install PostgreSQL on your system:
+
+<CodeGroup>
+```bash macOS (Homebrew)
+brew install postgresql@16
+brew services start postgresql@16
+```
+
+```bash Ubuntu/Debian
+sudo apt update
+sudo apt install postgresql postgresql-contrib
+sudo systemctl start postgresql
+```
+
+```bash Docker
+docker run --name saas-postgres \
+  -e POSTGRES_PASSWORD=secret \
+  -e POSTGRES_DB=saas_starter \
+  -p 5432:5432 \
+  -d postgres:16
+```
+</CodeGroup>
+
+Create the central database:
+
+```bash
+# Connect to PostgreSQL
+psql -U postgres
+
+# Create database and user
+CREATE DATABASE saas_starter;
+CREATE USER saas_user WITH PASSWORD 'your_password';
+GRANT ALL PRIVILEGES ON DATABASE saas_starter TO saas_user;
+
+# Grant schema permissions
+\c saas_starter
+GRANT ALL ON SCHEMA public TO saas_user;
+```
+
+## Environment Configuration
+
+Configure your database connection in `.env`:
+
+<ParamField path="DB_CONNECTION" type="string" default="pgsql" required>
+  The database driver to use. For this application, use `pgsql` for PostgreSQL.
+</ParamField>
+
+<ParamField path="DB_HOST" type="string" default="127.0.0.1">
+  The database server hostname or IP address.
+</ParamField>
+
+<ParamField path="DB_PORT" type="integer" default="5432">
+  The PostgreSQL server port.
+</ParamField>
+
+<ParamField path="DB_DATABASE" type="string" required>
+  The name of your central database.
+</ParamField>
+
+<ParamField path="DB_USERNAME" type="string" required>
+  Database username with permissions to create databases (required for tenant database creation).
+</ParamField>
+
+<ParamField path="DB_PASSWORD" type="string" required>
+  Database password for authentication.
+</ParamField>
+
+<ParamField path="DB_CHARSET" type="string" default="utf8">
+  Character set for the database connection.
+</ParamField>
+
+<ParamField path="DB_SSLMODE" type="string" default="prefer">
+  SSL mode for PostgreSQL connections. Options: `disable`, `allow`, `prefer`, `require`, `verify-ca`, `verify-full`
+</ParamField>
+
+### Example Configuration
+
+<CodeGroup>
+```bash Local Development
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=saas_starter
+DB_USERNAME=saas_user
+DB_PASSWORD=secret
+```
+
+```bash Production
+DB_CONNECTION=pgsql
+DB_HOST=your-db-host.rds.amazonaws.com
+DB_PORT=5432
+DB_DATABASE=saas_prod
+DB_USERNAME=saas_prod_user
+DB_PASSWORD=secure-password-here
+DB_SSLMODE=require
+```
+
+```bash Docker Compose
+DB_CONNECTION=pgsql
+DB_HOST=postgres
+DB_PORT=5432
+DB_DATABASE=saas_starter
+DB_USERNAME=postgres
+DB_PASSWORD=secret
+```
+</CodeGroup>
+
+## Running Migrations
+
+### Central Database Migrations
+
+Run migrations for the central database (tenants, plans, subscriptions):
+
+```bash
+php artisan migrate
+```
+
+This creates the following central tables:
+- `tenants` - Tenant information and metadata
+- `domains` - Custom domains for tenants
+- `plans` - Subscription plans
+- `subscriptions` - Tenant subscription data
+- `features` - Available features for plans
+- `activity_logs` - System activity tracking
+- `settings` - Global application settings
+
+### Tenant Database Migrations
+
+Create and migrate a tenant database:
+
+```bash
+# Create a new tenant with their database
+php artisan tenants:create tenant-slug
+
+# Run migrations for all tenant databases
+php artisan tenants:migrate
+
+# Run migrations for a specific tenant
+php artisan tenants:migrate --tenants=tenant-id
+```
+
+<Note>
+  Tenant migrations are located in `database/migrations/tenant/` and run automatically when new tenants are created.
+</Note>
+
+## Database Schema Overview
+
+### Central Database Tables
+
+#### Tenants Table
+
+Stores all tenant information:
+
+```php
+table('tenants')
+  - id (string, primary) - UUID identifier
+  - name (string) - Tenant name
+  - tenancy_db_name (string, unique) - Database name for this tenant
+  - plan_id (foreign) - Current subscription plan
+  - owner_name (string) - Tenant owner name
+  - owner_email (string) - Tenant owner email
+  - owner_password (string) - Tenant owner password
+  - status (string) - Trial, Active, Suspended, Canceled
+  - subscription_ends_at (timestamp)
+  - trial_ends_at (timestamp)
+  - canceled_at (timestamp)
+  - is_active (boolean)
+  - data (json) - Additional metadata
+  - created_at, updated_at
+```
+
+#### Domains Table
+
+Manages custom domains for tenants:
+
+```php
+table('domains')
+  - id (increments)
+  - domain (string, unique) - Full domain name
+  - tenant_id (foreign) - References tenants.id
+  - created_at, updated_at
+```
+
+#### Plans Table
+
+Defines available subscription plans:
+
+```php
+table('plans')
+  - id (increments)
+  - name (string) - Plan name
+  - slug (string, unique) - URL-friendly identifier
+  - description (text) - Plan description
+  - price (decimal) - Plan price
+  - currency (string) - Default: USD
+  - duration_in_days (integer) - Billing cycle length
+  - is_free (boolean) - Free plan flag
+  - is_active (boolean) - Plan availability
+  - created_at, updated_at, deleted_at
+```
+
+#### Subscriptions Table
+
+Tracks tenant subscriptions:
+
+```php
+table('subscriptions')
+  - id (increments)
+  - tenant_id (foreign) - References tenants.id
+  - plan_id (foreign) - References plans.id
+  - stripe_id (string) - Stripe subscription ID
+  - stripe_status (string) - Stripe subscription status
+  - stripe_price (string) - Stripe price ID
+  - quantity (integer)
+  - trial_ends_at (timestamp)
+  - ends_at (timestamp)
+  - created_at, updated_at
+```
+
+#### Features Table
+
+Defines available features:
+
+```php
+table('features')
+  - id (increments)
+  - name (string) - Feature name
+  - code (string, unique) - Feature identifier
+  - description (text) - Feature description
+  - created_at, updated_at
+```
+
+### Tenant Database Tables
+
+Each tenant database contains:
+
+- `users` - Tenant-specific users
+- `password_reset_tokens` - Password reset tokens
+- `sessions` - User sessions
+- `personal_access_tokens` - API tokens
+- `jobs` - Background job queue
+- `cache` - Cache storage
+- `settings` - Tenant-specific settings
+
+## Tenancy Configuration
+
+The multi-tenant behavior is configured in `config/tenancy.php`:
+
+```php
+'database' => [
+    'central_connection' => env('DB_CONNECTION', 'central'),
+    'prefix' => 'tenant',
+    'suffix' => '',
+],
+```
+
+Tenant databases are named: `tenant{tenant_id}`
+
+For example, a tenant with ID `abc123` gets database: `tenantabc123`
+
+## Database Management Commands
+
+### Tenant Operations
+
+```bash
+# Create a new tenant
+php artisan tenants:create
+
+# List all tenants
+php artisan tenants:list
+
+# Run migrations for all tenants
+php artisan tenants:migrate
+
+# Rollback tenant migrations
+php artisan tenants:migrate:rollback
+
+# Seed tenant databases
+php artisan tenants:seed
+
+# Run artisan command for all tenants
+php artisan tenants:run artisan-command
+```
+
+### Database Maintenance
+
+```bash
+# Refresh central database (DESTRUCTIVE)
+php artisan migrate:fresh
+
+# Seed central database
+php artisan db:seed
+
+# Create database backup
+pg_dump -U saas_user saas_starter > backup.sql
+
+# Restore database
+psql -U saas_user saas_starter < backup.sql
+```
+
+## Production Considerations
+
+<Warning>
+  **Database User Permissions**: The database user must have `CREATEDB` privilege to create tenant databases automatically.
+</Warning>
+
+### Grant Database Creation Rights
+
+```sql
+ALTER USER saas_user CREATEDB;
+```
+
+### Connection Pooling
+
+For production, use connection pooling with PgBouncer:
+
+```bash
+# Install PgBouncer
+sudo apt install pgbouncer
+
+# Configure in .env
+DB_HOST=127.0.0.1
+DB_PORT=6432  # PgBouncer port
+```
+
+### Performance Tuning
+
+Optimize PostgreSQL for Laravel:
+
+```sql
+-- config/database.php already includes:
+'prefix_indexes' => true,
+'search_path' => 'public',
+'sslmode' => env('DB_SSLMODE', 'prefer'),
+```
+
+### Backup Strategy
+
+1. **Central Database**: Daily automated backups
+2. **Tenant Databases**: Per-tenant backup schedules
+3. **Point-in-Time Recovery**: Enable WAL archiving
+
+```bash
+# Backup all tenant databases
+for db in $(psql -U postgres -t -c "SELECT datname FROM pg_database WHERE datname LIKE 'tenant%'"); do
+    pg_dump -U saas_user $db > "backup_${db}_$(date +%Y%m%d).sql"
+done
+```
+
+## Troubleshooting
+
+### Connection Issues
+
+```bash
+# Test connection
+php artisan tinker
+>>> DB::connection()->getPdo();
+
+# Check PostgreSQL is running
+pg_isready -h 127.0.0.1 -p 5432
+```
+
+### Permission Errors
+
+```sql
+-- Grant all permissions
+GRANT ALL PRIVILEGES ON DATABASE saas_starter TO saas_user;
+GRANT ALL ON SCHEMA public TO saas_user;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO saas_user;
+```
+
+### Tenant Database Issues
+
+```bash
+# List tenant databases
+php artisan tenants:list
+
+# Check specific tenant database
+psql -U saas_user -d tenantabc123 -c "\dt"
+```
+
+## Next Steps
+
+- [Configure email settings](/configuration/email) for tenant notifications
+- Learn about [tenant management](/features/tenancy) features
+- Set up [monitoring and logging](/deployment/monitoring) for database performance

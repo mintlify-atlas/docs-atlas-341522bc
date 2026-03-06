@@ -1,0 +1,457 @@
+---
+title: 'Authentication System'
+description: 'Complete guide to Laravel Fortify authentication including login, registration, password reset, and email verification'
+---
+
+## Overview
+
+SaaS Starter Vue uses [Laravel Fortify](https://laravel.com/docs/fortify) for authentication, providing:
+
+- Email/password login
+- User registration
+- Password reset via email
+- Email verification
+- Two-factor authentication (2FA)
+- Password confirmation
+
+<Note>
+  Authentication works on both central and tenant domains with isolated user databases.
+</Note>
+
+## Authentication Features
+
+Fortify features are configured in `config/fortify.php`:
+
+```php
+// config/fortify.php:146
+'features' => [
+    Features::registration(),
+    Features::resetPasswords(),
+    Features::emailVerification(),
+    Features::twoFactorAuthentication([
+        'confirm' => true,
+        'confirmPassword' => true,
+    ]),
+],
+```
+
+## Login
+
+### Central Domain Login
+
+System administrators log in at the central domain:
+
+```php
+// routes/web.php:110
+Route::get('/login', [AuthenticatedSessionController::class, 'create'])
+    ->middleware(['guest:'.config('fortify.guard')])
+    ->name('login');
+
+Route::post('/login', [AuthenticatedSessionController::class, 'store'])
+    ->middleware(['guest:'.config('fortify.guard')])
+    ->name('login.store');
+```
+
+**Login Flow:**
+
+<Steps>
+  <Step title="Visit Login Page">
+    Navigate to `/auth/login` on the central domain
+  </Step>
+  
+  <Step title="Enter Credentials">
+    Provide your email and password
+  </Step>
+  
+  <Step title="Two-Factor (if enabled)">
+    Enter your 2FA code if two-factor authentication is enabled
+  </Step>
+  
+  <Step title="Redirect to Dashboard">
+    Successfully authenticated users are redirected to `/dashboard`
+  </Step>
+</Steps>
+
+### Tenant Domain Login
+
+Tenant users log in at their subdomain:
+
+```php
+// routes/tenant.php:28
+Route::get('login', [\App\Http\Controllers\Tenant\Auth\LoginController::class, 'create'])
+    ->name('tenant.login');
+
+Route::post('login', [\App\Http\Controllers\Tenant\Auth\LoginController::class, 'store'])
+    ->name('tenant.login.store');
+```
+
+<Note>
+  Tenant authentication is completely isolated. Users cannot log in to the central domain with tenant credentials and vice versa.
+</Note>
+
+### Rate Limiting
+
+Login attempts are throttled to prevent brute force attacks:
+
+```php
+// config/fortify.php:117
+'limiters' => [
+    'login' => 'login',
+    'two-factor' => 'two-factor',
+],
+```
+
+Default: **5 attempts per minute** per email/IP combination.
+
+## Registration
+
+### User Registration
+
+New users can register if the registration feature is enabled:
+
+```php
+// routes/web.php:146
+Route::get('/register', [RegisteredUserController::class, 'create'])
+    ->middleware(['guest:'.config('fortify.guard')])
+    ->name('register');
+
+Route::post('/register', [RegisteredUserController::class, 'store'])
+    ->middleware(['guest:'.config('fortify.guard')]);
+```
+
+### Guest Tenant Registration
+
+Prospective customers can create their own tenant workspace:
+
+```php
+// routes/web.php:45
+Route::get('guest-register', [GuestRegisterController::class, 'index'])
+    ->middleware(['guest'])
+    ->name('guest-register.index');
+
+Route::post('guest-register', [GuestRegisterController::class, 'store'])
+    ->middleware(['guest', 'throttle:6,1'])
+    ->name('guest-register.store');
+```
+
+**Registration Process:**
+
+<Steps>
+  <Step title="Fill Registration Form">
+    Provide company name, subdomain, owner details, and password
+  </Step>
+  
+  <Step title="Tenant Provisioning">
+    System automatically creates tenant database and domain
+  </Step>
+  
+  <Step title="Admin User Creation">
+    Owner account is created with admin privileges
+  </Step>
+  
+  <Step title="Redirect to Tenant">
+    User is redirected to their new tenant subdomain login page
+  </Step>
+</Steps>
+
+<Warning>
+  Guest registration can be disabled via system settings. Check the `guest_registration` setting in the database.
+</Warning>
+
+## Password Reset
+
+### Request Password Reset
+
+Users can request a password reset link via email:
+
+```php
+// routes/web.php:125
+Route::get('/forgot-password', [PasswordResetLinkController::class, 'create'])
+    ->middleware(['guest:'.config('fortify.guard')])
+    ->name('password.request');
+
+Route::post('/forgot-password', [PasswordResetLinkController::class, 'store'])
+    ->middleware(['guest:'.config('fortify.guard')])
+    ->name('password.email');
+```
+
+### Reset Password Flow
+
+<Steps>
+  <Step title="Request Reset Link">
+    User enters their email at `/auth/forgot-password`
+  </Step>
+  
+  <Step title="Email Sent">
+    System sends password reset link to the user's email
+  </Step>
+  
+  <Step title="Click Reset Link">
+    User clicks the link in their email
+  </Step>
+  
+  <Step title="Set New Password">
+    User enters and confirms their new password
+  </Step>
+  
+  <Step title="Password Updated">
+    Password is updated and user can log in with new credentials
+  </Step>
+</Steps>
+
+```php
+// routes/web.php:129
+Route::get('/reset-password/{token}', [NewPasswordController::class, 'create'])
+    ->middleware(['guest:'.config('fortify.guard')])
+    ->name('password.reset');
+
+Route::post('/reset-password', [NewPasswordController::class, 'store'])
+    ->middleware(['guest:'.config('fortify.guard')])
+    ->name('password.update');
+```
+
+## Email Verification
+
+### Verification Required
+
+Many routes require email verification:
+
+```php
+Route::get('dashboard', [DashboardController::class, 'index'])
+    ->middleware(['auth', 'verified'])
+    ->name('dashboard');
+```
+
+### Verification Process
+
+<Steps>
+  <Step title="User Registers">
+    New user creates an account
+  </Step>
+  
+  <Step title="Verification Email Sent">
+    System automatically sends verification email
+  </Step>
+  
+  <Step title="Click Verification Link">
+    User clicks the link in their email
+  </Step>
+  
+  <Step title="Email Verified">
+    User's email is marked as verified and they gain full access
+  </Step>
+</Steps>
+
+```php
+// routes/web.php:158
+Route::get('/email/verify', [EmailVerificationPromptController::class, '__invoke'])
+    ->middleware([config('fortify.auth_middleware', 'auth').':'.config('fortify.guard')])
+    ->name('verification.notice');
+
+Route::get('/email/verify/{id}/{hash}', [VerifyEmailController::class, '__invoke'])
+    ->middleware(['auth', 'signed', 'throttle:6,1'])
+    ->name('verification.verify');
+```
+
+### Resend Verification Email
+
+Users can request a new verification email:
+
+```php
+// routes/web.php:167
+Route::post('/email/verification-notification', [EmailVerificationNotificationController::class, 'store'])
+    ->middleware(['auth', 'throttle:6,1'])
+    ->name('verification.send');
+```
+
+## User Model
+
+The User model includes authentication traits:
+
+```php
+// app/Models/System/User.php:12
+class User extends Authenticatable
+{
+    use HasApiTokens, HasFactory, Notifiable, TwoFactorAuthenticatable;
+
+    protected $fillable = [
+        'name',
+        'email',
+        'password',
+    ];
+
+    protected $hidden = [
+        'password',
+        'two_factor_secret',
+        'two_factor_recovery_codes',
+        'remember_token',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+            'two_factor_confirmed_at' => 'datetime',
+        ];
+    }
+}
+```
+
+### Password Hashing
+
+Passwords are automatically hashed using the `password` cast:
+
+```php
+'password' => 'hashed'
+```
+
+No need to manually hash passwords when creating users.
+
+## Profile Management
+
+### Update Profile Information
+
+Users can update their name and email:
+
+```php
+// routes/web.php:174
+Route::put('/user/profile-information', [ProfileInformationController::class, 'update'])
+    ->middleware([config('fortify.auth_middleware', 'auth').':'.config('fortify.guard')])
+    ->name('user-profile-information.update');
+```
+
+### Update Password
+
+Authenticated users can change their password:
+
+```php
+// routes/web.php:181
+Route::put('/user/password', [PasswordController::class, 'update'])
+    ->middleware([config('fortify.auth_middleware', 'auth').':'.config('fortify.guard')])
+    ->name('user-password.update');
+```
+
+## Password Confirmation
+
+Sensitive operations require password confirmation:
+
+```php
+// routes/web.php:188
+Route::get('/user/confirm-password', [ConfirmablePasswordController::class, 'show'])
+    ->middleware([config('fortify.auth_middleware', 'auth').':'.config('fortify.guard')])
+    ->name('password.confirm');
+
+Route::post('/user/confirm-password', [ConfirmablePasswordController::class, 'store'])
+    ->middleware([config('fortify.auth_middleware', 'auth').':'.config('fortify.guard')]);
+```
+
+Use the `password.confirm` middleware on sensitive routes:
+
+```php
+Route::post('/sensitive-action', [Controller::class, 'action'])
+    ->middleware(['auth', 'password.confirm']);
+```
+
+## Logout
+
+Users can log out from both central and tenant domains:
+
+```php
+// Central domain
+// routes/web.php:119
+Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
+    ->name('logout');
+
+// Tenant domain
+// routes/tenant.php:37
+Route::post('logout', [\App\Http\Controllers\Tenant\Auth\LoginController::class, 'destroy'])
+    ->name('tenant.logout');
+```
+
+## Configuration
+
+### Fortify Settings
+
+Key configuration options in `config/fortify.php`:
+
+<ParamField path="guard" type="string" default="web">
+  The authentication guard to use
+</ParamField>
+
+<ParamField path="passwords" type="string" default="users">
+  Password broker for reset functionality
+</ParamField>
+
+<ParamField path="username" type="string" default="email">
+  Field used for authentication (email)
+</ParamField>
+
+<ParamField path="home" type="string" default="/dashboard">
+  Redirect path after successful authentication
+</ParamField>
+
+<ParamField path="views" type="boolean" default="true">
+  Enable view routes for authentication pages
+</ParamField>
+
+### Customizing Redirects
+
+Change the post-login redirect:
+
+```php
+// config/fortify.php:76
+'home' => '/dashboard',
+```
+
+## Security Best Practices
+
+<Warning>
+  Always use HTTPS in production to protect user credentials during transmission.
+</Warning>
+
+1. **Use Strong Passwords** - Enforce password requirements with validation rules
+2. **Enable 2FA** - Require two-factor authentication for admin accounts
+3. **Rate Limiting** - Prevents brute force attacks (enabled by default)
+4. **Email Verification** - Verify user email addresses before granting full access
+5. **HTTPS Only** - Never transmit credentials over unencrypted connections
+6. **Password Hashing** - Laravel uses bcrypt by default (secure)
+
+## Testing Authentication
+
+Use Laravel's testing helpers:
+
+```php
+// Acting as authenticated user
+$this->actingAs($user)
+    ->get('/dashboard')
+    ->assertStatus(200);
+
+// Testing login
+$this->post('/auth/login', [
+    'email' => 'user@example.com',
+    'password' => 'password',
+])->assertRedirect('/dashboard');
+
+// Testing guest middleware
+$this->get('/dashboard')
+    ->assertRedirect('/auth/login');
+```
+
+## Common Issues
+
+<Accordion title="Users can't receive password reset emails">
+  Check your mail configuration in `.env`. For local development, use a service like Mailtrap or Laravel's log mail driver:
+  
+  ```bash
+  MAIL_MAILER=log
+  ```
+</Accordion>
+
+<Accordion title="Login redirects to wrong domain">
+  For tenant logins, ensure you're using the correct login route (`tenant.login`) instead of the central domain route.
+</Accordion>
+
+<Accordion title="Rate limiting blocking legitimate users">
+  Adjust rate limiting in `config/fortify.php` or clear rate limits manually during development.
+</Accordion>

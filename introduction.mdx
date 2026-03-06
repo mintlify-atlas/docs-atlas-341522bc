@@ -1,0 +1,151 @@
+---
+title: Introduction
+description: A modern, full-stack SaaS starter kit built with Laravel 12 and Vue 3
+---
+
+# SaaS Starter Vue
+
+SaaS Starter Vue is a robust, production-ready template for building Software as a Service applications quickly and efficiently. It combines the power of **Laravel 12** on the backend with **Vue 3** and **Inertia.js 2.0** on the frontend, styled with **Tailwind CSS 4**.
+
+## What is SaaS Starter Vue?
+
+This starter kit provides a complete foundation for multi-tenant SaaS applications, eliminating months of development work by providing pre-built authentication, tenant management, subscription plans, and a modern UI out of the box.
+
+Built with best practices and modern tools, SaaS Starter Vue lets you focus on your unique business logic rather than reinventing the wheel.
+
+## Who is this for?
+
+<CardGroup cols={2}>
+  <Card title="Entrepreneurs" icon="lightbulb">
+    Launch your SaaS idea faster without building authentication and multi-tenancy from scratch
+  </Card>
+  <Card title="Development Teams" icon="users">
+    Start projects with a solid foundation and consistent architecture
+  </Card>
+  <Card title="Freelancers" icon="briefcase">
+    Deliver client projects efficiently with proven patterns and components
+  </Card>
+  <Card title="Laravel Developers" icon="code">
+    Build modern SPAs with familiar backend tools and powerful frontend stack
+  </Card>
+</CardGroup>
+
+## Key Features
+
+### Multi-Tenancy
+Complete tenant management system powered by `stancl/tenancy`. Each tenant gets isolated data, custom domains, and independent database schemas.
+
+### Authentication & Security
+Fully-featured authentication system using Laravel Fortify:
+- User registration and login
+- Password reset functionality
+- Email verification
+- **Two-Factor Authentication (2FA)**
+- Session management
+
+### Subscription Management
+Integrated plan system for managing subscription tiers, pricing, and tenant access levels.
+
+### Modern Frontend Stack
+Monolithic SPA architecture with:
+- **Vue 3** with Composition API and TypeScript
+- **Inertia.js 2.0** for seamless server-client communication
+- **Tailwind CSS 4** for utility-first styling
+- Pre-built UI components using `reka-ui` and `lucide-vue-next`
+
+### Developer Experience
+- **PNPM** for fast, efficient package management
+- **Vite** for lightning-fast development builds
+- Hot module replacement (HMR)
+- Type safety with TypeScript
+- Automatic linting and formatting
+
+## Technology Stack
+
+<CardGroup cols={3}>
+  <Card title="Backend" icon="server">
+    - Laravel 12
+    - PHP 8.2+
+    - PostgreSQL
+  </Card>
+  <Card title="Frontend" icon="window">
+    - Vue 3
+    - Inertia.js 2.0
+    - TypeScript
+  </Card>
+  <Card title="Styling" icon="palette">
+    - Tailwind CSS 4
+    - reka-ui components
+    - lucide-vue-next icons
+  </Card>
+</CardGroup>
+
+## Core Packages
+
+### Backend Dependencies
+```json
+"inertiajs/inertia-laravel": "^2.0",
+"laravel/fortify": "^1.30",
+"laravel/framework": "^12.0",
+"stancl/tenancy": "^3.9"
+```
+
+### Frontend Dependencies
+```json
+"@inertiajs/vue3": "^2.3.7",
+"vue": "^3.5.13",
+"tailwindcss": "^4.1.1",
+"reka-ui": "^2.6.1"
+```
+
+## What's Included
+
+<Steps>
+  <Step title="Authentication System">
+    Complete auth flow with login, registration, password reset, email verification, and 2FA
+  </Step>
+  <Step title="Tenant Management">
+    Create, update, cancel, and restore tenants with automatic database provisioning
+  </Step>
+  <Step title="Plan Management">
+    Define subscription plans with pricing, features, and limits
+  </Step>
+  <Step title="Dashboard UI">
+    Pre-built admin dashboard with tenant overview, statistics, and management tools
+  </Step>
+  <Step title="Settings Pages">
+    User profile management, security settings, and 2FA configuration
+  </Step>
+</Steps>
+
+## Project Structure
+
+```bash
+├── app/                    # Backend logic
+│   ├── Http/Controllers/   # Controllers for routes
+│   ├── Models/             # Eloquent models
+│   └── Services/           # Business logic services
+├── resources/js/           # Frontend source code
+│   ├── components/         # Vue components
+│   ├── pages/              # Inertia pages
+│   └── layouts/            # Page layouts
+├── routes/                 # Route definitions
+│   ├── web.php            # Central domain routes
+│   └── settings.php       # User settings routes
+└── database/              # Migrations and seeders
+```
+
+<Note>
+  This starter kit is designed to be extended and customized for your specific SaaS application needs.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Set up your development environment and install dependencies
+  </Card>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get a working SaaS app running in minutes
+  </Card>
+</CardGroup>

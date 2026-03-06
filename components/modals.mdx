@@ -1,0 +1,644 @@
+---
+title: Modals & Dialogs
+description: Display overlay content with Dialog, Sheet, Popover, and Dropdown components
+---
+
+## Overview
+
+SaaS Starter Vue includes several overlay components for displaying content on top of the main interface. All components are built with reka-ui for full accessibility and keyboard navigation support.
+
+## Dialog (Modal)
+
+Dialogs are modal overlays that require user interaction before dismissing.
+
+### Basic Dialog
+
+```vue
+<script setup lang="ts">
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+</script>
+
+<template>
+  <Dialog>
+    <DialogTrigger as-child>
+      <Button>Open Dialog</Button>
+    </DialogTrigger>
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>Dialog Title</DialogTitle>
+        <DialogDescription>
+          This is a description of what this dialog is about.
+        </DialogDescription>
+      </DialogHeader>
+      <!-- Dialog content -->
+    </DialogContent>
+  </Dialog>
+</template>
+```
+
+### Dialog with Form
+
+Dialogs commonly contain forms for user input:
+
+```vue
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useForm } from '@inertiajs/vue3'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import InputError from '@/components/InputError.vue'
+
+const open = ref(false)
+
+const form = useForm({
+  name: '',
+  email: '',
+})
+
+const handleSubmit = () => {
+  form.post('/endpoint', {
+    onSuccess: () => {
+      open.value = false
+      form.reset()
+    },
+  })
+}
+</script>
+
+<template>
+  <Dialog v-model:open="open">
+    <DialogTrigger as-child>
+      <Button>Create User</Button>
+    </DialogTrigger>
+    <DialogContent>
+      <form @submit.prevent="handleSubmit">
+        <DialogHeader>
+          <DialogTitle>Create New User</DialogTitle>
+          <DialogDescription>
+            Fill in the details below to create a new user.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div class="grid gap-4 py-4">
+          <div class="grid gap-2">
+            <Label for="name">Name</Label>
+            <Input id="name" v-model="form.name" />
+            <InputError :message="form.errors.name" />
+          </div>
+          
+          <div class="grid gap-2">
+            <Label for="email">Email</Label>
+            <Input id="email" v-model="form.email" type="email" />
+            <InputError :message="form.errors.email" />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <DialogClose as-child>
+            <Button variant="outline" type="button">Cancel</Button>
+          </DialogClose>
+          <Button type="submit" :disabled="form.processing">
+            Create
+          </Button>
+        </DialogFooter>
+      </form>
+    </DialogContent>
+  </Dialog>
+</template>
+```
+
+### Confirmation Dialog
+
+Example from `resources/js/components/DeleteUser.vue:40-111`:
+
+```vue
+<script setup lang="ts">
+import { Form } from '@inertiajs/vue3'
+import { useTemplateRef } from 'vue'
+import { destroy as deleteProfile } from '@/actions/App/Http/Controllers/System/Settings/ProfileController'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import InputError from '@/components/InputError.vue'
+
+const passwordInput = useTemplateRef('passwordInput')
+</script>
+
+<template>
+  <Dialog>
+    <DialogTrigger as-child>
+      <Button variant="destructive">Delete account</Button>
+    </DialogTrigger>
+    <DialogContent>
+      <Form
+        v-bind="deleteProfile()"
+        reset-on-success
+        @error="() => passwordInput?.$el?.focus()"
+        v-slot="{ errors, processing, reset, clearErrors }"
+        class="space-y-6"
+      >
+        <DialogHeader class="space-y-3">
+          <DialogTitle>
+            Are you sure you want to delete your account?
+          </DialogTitle>
+          <DialogDescription>
+            Once your account is deleted, all of its resources and data 
+            will also be permanently deleted. Please enter your password 
+            to confirm you would like to permanently delete your account.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div class="grid gap-2">
+          <Label for="password" class="sr-only">Password</Label>
+          <Input
+            id="password"
+            type="password"
+            name="password"
+            ref="passwordInput"
+            placeholder="Password"
+          />
+          <InputError :message="errors.password" />
+        </div>
+
+        <DialogFooter class="gap-2">
+          <DialogClose as-child>
+            <Button
+              variant="secondary"
+              @click="() => { clearErrors(); reset(); }"
+            >
+              Cancel
+            </Button>
+          </DialogClose>
+
+          <Button
+            type="submit"
+            variant="destructive"
+            :disabled="processing"
+          >
+            Delete account
+          </Button>
+        </DialogFooter>
+      </Form>
+    </DialogContent>
+  </Dialog>
+</template>
+```
+
+### Dialog Components
+
+- **Dialog** - Root component that manages state
+- **DialogTrigger** - Button or element that opens the dialog
+- **DialogContent** - Container for dialog content with overlay
+- **DialogHeader** - Header section for title and description
+- **DialogTitle** - Main heading (required for accessibility)
+- **DialogDescription** - Supporting text
+- **DialogFooter** - Footer section for actions
+- **DialogClose** - Button to close dialog
+- **DialogOverlay** - Background overlay (included in DialogContent)
+
+### Controlled Dialog
+
+Manage dialog state externally:
+
+```vue
+<script setup lang="ts">
+import { ref } from 'vue'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+
+const isOpen = ref(false)
+
+const openDialog = () => {
+  isOpen.value = true
+}
+
+const closeDialog = () => {
+  isOpen.value = false
+}
+</script>
+
+<template>
+  <div>
+    <Button @click="openDialog">Open Dialog</Button>
+    
+    <Dialog v-model:open="isOpen">
+      <DialogContent>
+        <!-- content -->
+        <Button @click="closeDialog">Close</Button>
+      </DialogContent>
+    </Dialog>
+  </div>
+</template>
+```
+
+### Scrollable Dialog
+
+For long content, use `DialogScrollContent`:
+
+```vue
+<script setup lang="ts">
+import {
+  Dialog,
+  DialogScrollContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+</script>
+
+<template>
+  <Dialog>
+    <DialogScrollContent>
+      <DialogHeader>
+        <DialogTitle>Long Content</DialogTitle>
+      </DialogHeader>
+      <!-- Long scrollable content -->
+      <div class="space-y-4">
+        <!-- ... lots of content ... -->
+      </div>
+    </DialogScrollContent>
+  </Dialog>
+</template>
+```
+
+### Hide Close Button
+
+Remove the X close button:
+
+```vue
+<template>
+  <DialogContent :show-close-button="false">
+    <!-- Content -->
+  </DialogContent>
+</template>
+```
+
+## Sheet (Slide-over)
+
+Sheets slide in from the edge of the screen:
+
+```vue
+<script setup lang="ts">
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet'
+import { Button } from '@/components/ui/button'
+</script>
+
+<template>
+  <Sheet>
+    <SheetTrigger as-child>
+      <Button variant="outline">Open Sheet</Button>
+    </SheetTrigger>
+    <SheetContent>
+      <SheetHeader>
+        <SheetTitle>Sheet Title</SheetTitle>
+        <SheetDescription>
+          Additional information goes here.
+        </SheetDescription>
+      </SheetHeader>
+      <!-- Sheet content -->
+    </SheetContent>
+  </Sheet>
+</template>
+```
+
+### Sheet Sides
+
+Sheets can slide from different sides:
+
+```vue
+<template>
+  <div class="flex gap-2">
+    <Sheet>
+      <SheetTrigger as-child>
+        <Button>Left</Button>
+      </SheetTrigger>
+      <SheetContent side="left">
+        <!-- content -->
+      </SheetContent>
+    </Sheet>
+
+    <Sheet>
+      <SheetTrigger as-child>
+        <Button>Right</Button>
+      </SheetTrigger>
+      <SheetContent side="right">
+        <!-- content (default) -->
+      </SheetContent>
+    </Sheet>
+
+    <Sheet>
+      <SheetTrigger as-child>
+        <Button>Top</Button>
+      </SheetTrigger>
+      <SheetContent side="top">
+        <!-- content -->
+      </SheetContent>
+    </Sheet>
+
+    <Sheet>
+      <SheetTrigger as-child>
+        <Button>Bottom</Button>
+      </SheetTrigger>
+      <SheetContent side="bottom">
+        <!-- content -->
+      </SheetContent>
+    </Sheet>
+  </div>
+</template>
+```
+
+## Popover
+
+Non-modal overlay for displaying content:
+
+```vue
+<script setup lang="ts">
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Button } from '@/components/ui/button'
+</script>
+
+<template>
+  <Popover>
+    <PopoverTrigger as-child>
+      <Button variant="outline">Open Popover</Button>
+    </PopoverTrigger>
+    <PopoverContent>
+      <div class="space-y-2">
+        <h4 class="font-medium">Popover Title</h4>
+        <p class="text-sm text-muted-foreground">
+          This is popover content that appears above other content.
+        </p>
+      </div>
+    </PopoverContent>
+  </Popover>
+</template>
+```
+
+### Popover Positioning
+
+```vue
+<template>
+  <PopoverContent side="top" align="start">
+    <!-- content -->
+  </PopoverContent>
+</template>
+```
+
+Options:
+- **side**: `'top' | 'right' | 'bottom' | 'left'`
+- **align**: `'start' | 'center' | 'end'`
+
+## Dropdown Menu
+
+Contextual menus for actions:
+
+```vue
+<script setup lang="ts">
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Button } from '@/components/ui/button'
+import { MoreVertical, Edit, Trash } from 'lucide-vue-next'
+</script>
+
+<template>
+  <DropdownMenu>
+    <DropdownMenuTrigger as-child>
+      <Button variant="ghost" size="icon">
+        <MoreVertical class="size-4" />
+      </Button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent>
+      <DropdownMenuLabel>Actions</DropdownMenuLabel>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem>
+        <Edit class="size-4 mr-2" />
+        Edit
+      </DropdownMenuItem>
+      <DropdownMenuItem class="text-destructive">
+        <Trash class="size-4 mr-2" />
+        Delete
+      </DropdownMenuItem>
+    </DropdownMenuContent>
+  </DropdownMenu>
+</template>
+```
+
+### Dropdown with Shortcuts
+
+```vue
+<script setup lang="ts">
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+</script>
+
+<template>
+  <DropdownMenu>
+    <DropdownMenuTrigger>Menu</DropdownMenuTrigger>
+    <DropdownMenuContent>
+      <DropdownMenuItem>
+        New File
+        <DropdownMenuShortcut>⌘N</DropdownMenuShortcut>
+      </DropdownMenuItem>
+      <DropdownMenuItem>
+        Save
+        <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
+      </DropdownMenuItem>
+    </DropdownMenuContent>
+  </DropdownMenu>
+</template>
+```
+
+## Context Menu
+
+Right-click menu:
+
+```vue
+<script setup lang="ts">
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
+</script>
+
+<template>
+  <ContextMenu>
+    <ContextMenuTrigger class="border rounded-lg p-8">
+      Right click me
+    </ContextMenuTrigger>
+    <ContextMenuContent>
+      <ContextMenuItem>Copy</ContextMenuItem>
+      <ContextMenuItem>Paste</ContextMenuItem>
+      <ContextMenuItem>Delete</ContextMenuItem>
+    </ContextMenuContent>
+  </ContextMenu>
+</template>
+```
+
+## Tooltip
+
+Short hints on hover:
+
+```vue
+<script setup lang="ts">
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { Button } from '@/components/ui/button'
+import { Info } from 'lucide-vue-next'
+</script>
+
+<template>
+  <TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger as-child>
+        <Button variant="ghost" size="icon">
+          <Info class="size-4" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p>This is helpful information</p>
+      </TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+</template>
+```
+
+## Toast Notifications
+
+Using vue-sonner for toast notifications:
+
+```vue
+<script setup lang="ts">
+import { toast } from 'vue-sonner'
+import { Button } from '@/components/ui/button'
+
+const showToast = () => {
+  toast.success('Operation completed successfully!')
+}
+
+const showError = () => {
+  toast.error('Something went wrong!')
+}
+
+const showInfo = () => {
+  toast.info('Here is some information')
+}
+
+const showWarning = () => {
+  toast.warning('Please be careful')
+}
+</script>
+
+<template>
+  <div class="flex gap-2">
+    <Button @click="showToast">Success</Button>
+    <Button @click="showError" variant="destructive">Error</Button>
+    <Button @click="showInfo" variant="outline">Info</Button>
+    <Button @click="showWarning" variant="secondary">Warning</Button>
+  </div>
+</template>
+```
+
+Make sure to include the Sonner component in your layout:
+
+```vue
+<script setup lang="ts">
+import { Sonner } from '@/components/ui/sonner'
+</script>
+
+<template>
+  <div>
+    <!-- Your app content -->
+    <Sonner />
+  </div>
+</template>
+```
+
+### Toast with Actions
+
+```typescript
+import { toast } from 'vue-sonner'
+
+toast.success('Event created', {
+  action: {
+    label: 'View',
+    onClick: () => console.log('View clicked'),
+  },
+})
+```
+
+## Accessibility
+
+All overlay components include:
+
+- **Focus management** - Focus is trapped within dialogs
+- **Keyboard navigation** - ESC to close, Tab to navigate
+- **ARIA attributes** - Proper roles and labels
+- **Screen reader support** - Announcements and descriptions
+- **Focus restoration** - Focus returns to trigger on close
+
+## Best Practices
+
+1. **Dialog vs Sheet** - Use dialogs for critical actions, sheets for contextual content
+2. **Always include titles** - Required for accessibility
+3. **Limit dialog content** - Keep dialogs focused and concise
+4. **Use confirmation dialogs** - For destructive actions
+5. **Manage focus** - Ensure focus moves appropriately
+6. **Close on success** - Programmatically close after successful form submission
+7. **Toast duration** - Keep messages brief and auto-dismiss
+8. **Dropdown positioning** - Ensure dropdowns don't overflow viewport
