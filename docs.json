@@ -37,7 +37,8 @@
               "features/multi-tenancy",
               "features/authentication",
               "features/subscription-plans",
-              "features/two-factor-auth"
+              "features/two-factor-auth",
+              "features/settings"
             ]
           },
           {

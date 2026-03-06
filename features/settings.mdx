@@ -1,0 +1,363 @@
+---
+title: 'Settings Management'
+description: 'Configure user profiles, system settings, API tokens, and application preferences'
+---
+
+## Overview
+
+SaaS Starter Vue provides comprehensive settings management for both system administrators and individual users:
+
+- User profile and password management
+- Two-factor authentication setup
+- System-wide settings (name, logo, guest registration)
+- SMTP email configuration
+- API token management
+- Appearance customization
+
+<Note>
+  Settings are context-aware: system settings are available on the central domain, while tenant settings are accessible on tenant domains.
+</Note>
+
+## User Settings
+
+### Profile Management
+
+Users can update their profile information and delete their account:
+
+```php
+// routes/settings.php:12
+Route::get('settings/profile', [ProfileController::class, 'edit'])
+    ->name('profile.edit');
+
+Route::patch('settings/profile', [ProfileController::class, 'update'])
+    ->name('profile.update');
+
+Route::delete('settings/profile', [ProfileController::class, 'destroy'])
+    ->name('profile.destroy');
+```
+
+**Profile Update:**
+
+```php
+// app/Http/Controllers/System/Settings/ProfileController.php:33
+public function update(ProfileUpdateRequest $request): RedirectResponse
+{
+    $request->user()->fill($request->validated());
+
+    if ($request->user()->isDirty('email')) {
+        $request->user()->email_verified_at = null;
+    }
+
+    $request->user()->save();
+
+    return to_route('system.settings.profile.edit');
+}
+```
+
+<Steps>
+  <Step title="Navigate to Profile Settings">
+    Go to `/settings/profile` from your dashboard
+  </Step>
+  
+  <Step title="Update Information">
+    Modify your name, email, or other profile fields
+  </Step>
+  
+  <Step title="Save Changes">
+    Click **Save** to update your profile
+  </Step>
+</Steps>
+
+<Warning>
+  If you change your email address, you'll need to verify the new email before accessing certain features.
+</Warning>
+
+### Password Management
+
+Users can change their password securely:
+
+```php
+// routes/settings.php:19
+Route::get('settings/password', [PasswordController::class, 'edit'])
+    ->name('user-password.edit');
+
+Route::put('settings/password', [PasswordController::class, 'update'])
+    ->middleware('throttle:6,1')
+    ->name('user-password.update');
+```
+
+**Requirements:**
+- Current password for verification
+- New password meeting complexity requirements
+- Password confirmation
+- Rate limited to 6 attempts per minute
+
+### Appearance Settings
+
+Users can customize the application appearance:
+
+```php
+// routes/settings.php:25
+Route::get('settings/appearance', function () {
+    return Inertia::render('system/settings/Appearance');
+})->name('appearance.edit');
+```
+
+Features:
+- Dark/light mode toggle
+- Theme customization
+- UI preferences
+
+## System Settings
+
+Available only to system administrators on the central domain.
+
+### General Settings
+
+Configure application-wide settings:
+
+```php
+// routes/settings.php:32
+Route::get('settings/general', [SystemSettingController::class, 'editGeneral'])
+    ->name('system.settings.general.edit');
+
+Route::post('settings/general', [SystemSettingController::class, 'updateGeneral'])
+    ->name('system.settings.general');
+```
+
+**Configurable Options:**
+
+<ParamField path="app_name" type="string" required>
+  Application name displayed in the UI and emails
+</ParamField>
+
+<ParamField path="app_logo" type="file">
+  Application logo (max 1MB, image format)
+</ParamField>
+
+<Accordion title="View General Settings Code">
+```php
+// app/Http/Controllers/System/Settings/SystemSettingController.php:27
+public function updateGeneral(Request $request)
+{
+    $validated = $request->validate([
+        'app_name' => 'required|string|max:255',
+        'app_logo' => 'nullable|image|max:1024', // Max 1MB
+    ]);
+
+    Setting::updateOrCreate(
+        ['key' => 'app_name'],
+        ['value' => $validated['app_name']]
+    );
+
+    if ($request->hasFile('app_logo')) {
+        $path = $request->file('app_logo')->store('logos', 'public');
+        
+        Setting::updateOrCreate(
+            ['key' => 'app_logo'],
+            ['value' => $path]
+        );
+    }
+
+    return redirect()->back()
+        ->with('success', 'Settings updated successfully.');
+}
+```
+</Accordion>
+
+### Guest Registration Settings
+
+Control whether new users can self-register:
+
+```php
+// routes/settings.php:38
+Route::get('settings/guest-register', [SystemSettingController::class, 'editGuestRegistration'])
+    ->name('system.settings.guest-register.edit');
+
+Route::post('settings/guest-register', [SystemSettingController::class, 'updateGuestRegistration'])
+    ->name('system.settings.guest-register');
+```
+
+**Options:**
+- Enable/disable guest registration
+- When enabled, users can create their own tenant workspaces
+- When disabled, only admins can create tenants
+
+```php
+// app/Http/Controllers/System/Settings/SystemSettingController.php:74
+public function updateGuestRegistration(Request $request)
+{
+    $validated = $request->validate([
+        'enabled' => 'required|boolean',
+    ]);
+
+    Setting::updateOrCreate(
+        ['key' => 'guest_registration'],
+        ['value' => $validated['enabled']]
+    );
+
+    return redirect()->back()->with('success', 'Settings updated successfully.');
+}
+```
+
+### SMTP Configuration
+
+Configure email settings for transactional emails:
+
+```php
+// routes/settings.php:44
+Route::get('settings/smtp', [SmtpController::class, 'edit'])
+    ->name('system.settings.smtp.edit');
+
+Route::post('settings/smtp', [SmtpController::class, 'update'])
+    ->name('system.settings.smtp');
+
+Route::post('settings/smtp/test', [SmtpController::class, 'test'])
+    ->name('system.settings.smtp.test');
+```
+
+**Configuration Fields:**
+- SMTP host
+- SMTP port
+- Encryption (TLS/SSL)
+- Username
+- Password
+- From address and name
+
+<Tip>
+  Use the **Test Email** feature to verify your SMTP configuration before saving.
+</Tip>
+
+## API Token Management
+
+Generate and manage API tokens for programmatic access:
+
+```php
+// routes/settings.php:54
+Route::post('settings/api-token/generate', [ApiTokenController::class, 'generate'])
+    ->name('system.settings.api-token.generate');
+
+Route::delete('settings/api-token', [ApiTokenController::class, 'revoke'])
+    ->name('system.settings.api-token.revoke');
+```
+
+### Generating Tokens
+
+```php
+// app/Http/Controllers/System/Settings/ApiTokenController.php:13
+public function generate(Request $request)
+{
+    // Revoke all existing tokens
+    $request->user()->tokens()->delete();
+
+    // Create new token
+    $token = $request->user()->createToken('api-token');
+
+    return redirect()->back()->with([
+        'success' => 'API token generated successfully.',
+        'token' => $token->plainTextToken,
+    ]);
+}
+```
+
+<Warning>
+  Store your API token securely. It will only be displayed once during generation.
+</Warning>
+
+### Using API Tokens
+
+Include the token in your API requests:
+
+```bash
+curl -H "Authorization: Bearer YOUR_API_TOKEN" \
+  https://app.yourdomain.com/api/endpoint
+```
+
+### Revoking Tokens
+
+```php
+// app/Http/Controllers/System/Settings/ApiTokenController.php:30
+public function revoke(Request $request)
+{
+    $request->user()->tokens()->delete();
+
+    return redirect()->back()->with('success', 'API token revoked successfully.');
+}
+```
+
+## Tenant Settings
+
+Tenant domains have their own settings pages with similar functionality:
+
+```php
+// routes/tenant-settings.php:11
+Route::get('settings/profile', [ProfileController::class, 'edit'])
+    ->name('tenant.settings.profile.edit');
+
+Route::get('settings/password', [PasswordController::class, 'edit'])
+    ->name('tenant.settings.password.edit');
+
+Route::get('settings/appearance', function () {
+    return Inertia::render('tenant/settings/Appearance');
+})->name('tenant.settings.appearance.edit');
+```
+
+Tenant users can:
+- Manage their profile
+- Change password
+- Customize appearance
+- Configure tenant-specific SMTP (if enabled)
+- Manage tenant API tokens
+
+## Settings Storage
+
+Settings are stored in the `settings` table:
+
+```sql
+-- Central domain settings
+CREATE TABLE settings (
+    id BIGINT PRIMARY KEY,
+    key VARCHAR(255) UNIQUE,
+    value TEXT,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+```
+
+Common settings keys:
+- `app_name` - Application name
+- `app_logo` - Logo path
+- `guest_registration` - Guest registration enabled/disabled
+- `smtp_*` - SMTP configuration values
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Secure API Tokens" icon="lock">
+    Store tokens in environment variables, never commit to source control
+  </Card>
+  
+  <Card title="Test SMTP First" icon="envelope">
+    Always test email configuration before enabling notifications
+  </Card>
+  
+  <Card title="Regular Password Updates" icon="key">
+    Encourage users to update passwords periodically
+  </Card>
+  
+  <Card title="Monitor Guest Registration" icon="user-plus">
+    Review self-registered tenants regularly for abuse prevention
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Two-Factor Auth" icon="shield" href="/features/two-factor-auth">
+    Enable 2FA for enhanced security
+  </Card>
+  
+  <Card title="Email Configuration" icon="envelope" href="/configuration/email">
+    Set up email providers for notifications
+  </Card>
+</CardGroup>
