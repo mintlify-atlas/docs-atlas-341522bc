@@ -1,0 +1,96 @@
+{
+  "projectType": "saas",
+  "projectName": "SaaS Starter Vue",
+  "projectDescription": "A modern SaaS starter template built with Laravel 12, Vue 3, and Inertia.js featuring multi-tenancy, subscription plans, and authentication.",
+  "theme": "almond",
+  "primaryColor": "#42b883",
+  "lightColor": null,
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/multi-tenancy",
+              "features/authentication",
+              "features/subscription-plans",
+              "features/two-factor-auth"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/environment",
+              "configuration/database",
+              "configuration/email"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "development/project-structure",
+              "development/frontend",
+              "development/backend",
+              "development/testing"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Components",
+        "groups": [
+          {
+            "group": "UI Components",
+            "pages": [
+              "components/overview",
+              "components/forms",
+              "components/buttons",
+              "components/modals"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Multi-tenancy with domain-based routing",
+    "Subscription plan management",
+    "Laravel Fortify authentication with 2FA",
+    "Vue 3 + Inertia.js SPA",
+    "Tailwind CSS 4 styling",
+    "PostgreSQL database support",
+    "Activity logging",
+    "User management",
+    "Settings management"
+  ],
+  "publicApiSurface": [
+    "POST /auth/login",
+    "POST /auth/register",
+    "POST /auth/logout",
+    "GET /dashboard",
+    "GET /plans",
+    "POST /plans",
+    "PUT /plans/{id}",
+    "DELETE /plans/{id}",
+    "GET /tenants",
+    "POST /tenants",
+    "PUT /tenants/{id}",
+    "DELETE /tenants/{id}",
+    "POST /tenants/{id}/cancel",
+    "POST /tenants/{id}/restore",
+    "POST /user/two-factor-authentication",
+    "GET /tenant/dashboard",
+    "GET /tenant/users"
+  ]
+}
